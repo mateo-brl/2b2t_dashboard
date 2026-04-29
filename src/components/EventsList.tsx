@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchRecentEvents } from "../api/client";
-import { useEventStream } from "../api/eventStream";
+import { useStream } from "../api/StreamContext";
 import type { BaseEvent } from "../api/types";
 
 const CAP = 50;
@@ -53,7 +53,7 @@ function StreamPill({ status, count }: { status: string; count: number }) {
 export function EventsList() {
   const [history, setHistory] = useState<BaseEvent[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const stream = useEventStream(CAP);
+  const stream = useStream();
 
   // Initial fetch: populate the list with the last 50 events from the DB so
   // the user does not stare at an empty box waiting for the next live event.
