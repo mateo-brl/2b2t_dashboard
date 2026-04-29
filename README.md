@@ -1,41 +1,76 @@
 # 2b2t-dashboard
 
-Read-only dashboard for the BaseFinder telemetry pipeline.
-Companion to [`2b2t_backend`](https://github.com/mateo-brl/2b2t_backend) and
-[`2b2t_addons`](https://github.com/mateo-brl/2b2t_addons).
+Dashboard read-only pour la pipeline de télémétrie BaseFinder.
+Bot émetteur : [`2b2t_addons`](https://github.com/mateo-brl/2b2t_addons).
+Backend ingest : [`2b2t_backend`](https://github.com/mateo-brl/2b2t_backend).
 
-Phase 2 of Jalon 2 — minimal live event stream. Map, base detail view,
-Discord OAuth, MapLibre rendering arrive in subsequent phases.
+Phase 2 du Jalon 2 — flux d'événements live minimal. Carte des bases,
+vue détail, Discord OAuth, rendu MapLibre arrivent dans les phases
+suivantes.
+
+## État actuel
+
+| Vue | Source | Rafraîchissement |
+|-----|--------|------------------|
+| `HealthBadge` (header) | `GET /v1/health` | 2 s (TanStack Query) |
+| `EventsList` (corps) | `GET /v1/events?limit=50` | 1 s |
+
+Type-coloré : `base_found` ambre, `bot_tick` ciel, autres gris.
 
 ## Stack
 
-- Vite + React 19 + TypeScript
+- Vite 8 + React 19 + TypeScript 6
 - Tailwind CSS 4 (`@tailwindcss/vite`)
-- TanStack Query (1s polling, SSE comes later)
+- TanStack Query 5 (polling, SSE viendra en Phase 3)
+
+Pas de routeur (single page), pas de state global (Zustand viendra avec
+les filtres et la carte), pas encore de tests JS (Phase 4).
 
 ## Run
 
-Backend must be reachable at `http://127.0.0.1:8080` (default). Override
-with `VITE_BACKEND_URL=https://...` at build time.
+Le backend doit être atteignable sur `http://127.0.0.1:8080` (défaut).
+Override avec `VITE_BACKEND_URL=https://...` au build.
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm run build    # static bundle in dist/
-npm run preview  # serve the built bundle (4173)
+npm run build    # bundle statique dans dist/ (prod)
+npm run preview  # sert le bundle build (4173)
 ```
 
-## What it shows
+Build de prod : ~228 KB JS / ~71 KB gzip.
 
-- **Header**: backend status badge (version + counters) — polls
-  `/v1/health` every 2 s.
-- **Recent events**: last 50 events from `/v1/events`, refreshed every 1 s.
-  Color-coded by type (`base_found` amber, `bot_tick` sky).
+## Layout
+
+```
+src/
+├── App.tsx                    # QueryClientProvider + layout (header + section events)
+├── main.tsx                   # Entry React
+├── index.css                  # @import "tailwindcss" + dark theme
+├── api/
+│   ├── client.ts              # fetch wrappers fetchHealth / fetchRecentEvents
+│   └── types.ts               # BaseEvent, BotTickEvent, BaseFoundEvent, *Response
+└── components/
+    ├── HealthBadge.tsx        # Badge backend (green/red/loading)
+    └── EventsList.tsx         # Tableau live (newest first)
+```
+
+## CORS
+
+Le backend autorise par défaut `localhost:5173` (Vite dev) et
+`localhost:4173` (Vite preview). Cf.
+[`2b2t_backend/src/main/kotlin/com/basefinder/backend/Main.kt`](https://github.com/mateo-brl/2b2t_backend/blob/main/src/main/kotlin/com/basefinder/backend/Main.kt).
 
 ## Notes
 
-- The 1 s poll is intentional for the MVP — it's stateless on the
-  backend side and the read load is trivial. SSE / WebSocket streaming
-  is Phase 3.
-- The dashboard never writes to the backend. CORS on the backend is
-  configured for `localhost:5173` and `localhost:4173` only in dev.
+- Polling 1 s : intentionnel pour le MVP — le backend est stateless
+  côté lecture, et la charge est triviale. Le push live (SSE ou WS)
+  arrive en Phase 3.
+- Le dashboard ne POST jamais sur le backend (lecture seule).
+- L'authentification (Discord OAuth) n'est pas en place — le dashboard
+  doit donc rester sur un réseau de confiance (localhost / VPN) tant
+  que la Phase 4 n'est pas livrée.
+
+## Licence
+
+GPL-3.0 (cohérent avec le bot et le backend).
