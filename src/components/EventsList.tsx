@@ -1,6 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { fetchRecentEvents } from "../api/client";
+import { useEventStream } from "../api/eventStream";
 import type { BaseEvent } from "../api/types";
+
+const CAP = 50;
 
 function formatTime(tsMs: number): string {
   return new Date(tsMs).toLocaleTimeString();
@@ -28,51 +31,95 @@ function summary(event: BaseEvent): string {
   return JSON.stringify(event);
 }
 
+function StreamPill({ status, count }: { status: string; count: number }) {
+  const cls =
+    status === "open"
+      ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40"
+      : status === "connecting"
+        ? "bg-zinc-700/40 text-zinc-300 ring-zinc-600/40"
+        : "bg-red-500/15 text-red-300 ring-red-500/40";
+  const label =
+    status === "open" ? "live" : status === "connecting" ? "connecting" : "stream lost";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs ring-1 ${cls}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {label} · {count}
+    </span>
+  );
+}
+
 export function EventsList() {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["events"],
-    queryFn: () => fetchRecentEvents(50),
-    refetchInterval: 1000,
-  });
+  const [history, setHistory] = useState<BaseEvent[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const stream = useEventStream(CAP);
 
-  if (isLoading) return <p className="text-zinc-500">Loading…</p>;
-  if (isError) return <p className="text-red-400">Error: {String(error)}</p>;
+  // Initial fetch: populate the list with the last 50 events from the DB so
+  // the user does not stare at an empty box waiting for the next live event.
+  useEffect(() => {
+    fetchRecentEvents(CAP)
+      .then((res) => setHistory(res.events))
+      .catch((e) => setHistoryError(String(e)));
+  }, []);
 
-  const events = data?.events ?? [];
-  if (events.length === 0) {
+  if (history === null && !historyError) return <p className="text-zinc-500">Loading…</p>;
+  if (historyError && stream.events.length === 0) {
+    return <p className="text-red-400">Error: {historyError}</p>;
+  }
+
+  // Merge history (REST snapshot) + live events (SSE), dedup by idempotency_key,
+  // keep newest last (insertion order), then cap.
+  const seen = new Set<string>();
+  const merged: BaseEvent[] = [];
+  for (const e of [...(history ?? []), ...stream.events]) {
+    if (!seen.has(e.idempotency_key)) {
+      seen.add(e.idempotency_key);
+      merged.push(e);
+    }
+  }
+  if (merged.length > CAP) merged.splice(0, merged.length - CAP);
+
+  if (merged.length === 0) {
     return (
-      <p className="text-zinc-500">
-        No events yet. Start the bot with{" "}
-        <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-300">
-          -Dbasefinder.backend.url=http://127.0.0.1:8080
-        </code>
-        .
-      </p>
+      <div className="space-y-2">
+        <StreamPill status={stream.status} count={0} />
+        <p className="text-zinc-500">
+          No events yet. Start the bot with{" "}
+          <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-300">
+            -Dbasefinder.backend.url=http://127.0.0.1:8080
+          </code>
+          .
+        </p>
+      </div>
     );
   }
 
   // Newest first
-  const ordered = [...events].reverse();
+  const ordered = [...merged].reverse();
 
   return (
-    <ol className="divide-y divide-zinc-800 rounded-lg border border-zinc-800 bg-zinc-950/40">
-      {ordered.map((e) => (
-        <li
-          key={e.idempotency_key}
-          className="flex items-baseline gap-3 px-4 py-2 font-mono text-sm"
-        >
-          <span className="w-20 shrink-0 text-zinc-500">
-            {formatTime(e.ts_utc_ms)}
-          </span>
-          <span
-            className={`inline-flex w-24 shrink-0 justify-center rounded px-2 py-0.5 text-xs ring-1 ${eventBadgeClass(e.type)}`}
+    <div className="space-y-2">
+      <StreamPill status={stream.status} count={merged.length} />
+      <ol className="divide-y divide-zinc-800 rounded-lg border border-zinc-800 bg-zinc-950/40">
+        {ordered.map((e) => (
+          <li
+            key={e.idempotency_key}
+            className="flex items-baseline gap-3 px-4 py-2 font-mono text-sm"
           >
-            {e.type}
-          </span>
-          <span className="w-12 shrink-0 text-right text-zinc-500">#{e.seq}</span>
-          <span className="flex-1 truncate text-zinc-300">{summary(e)}</span>
-        </li>
-      ))}
-    </ol>
+            <span className="w-20 shrink-0 text-zinc-500">
+              {formatTime(e.ts_utc_ms)}
+            </span>
+            <span
+              className={`inline-flex w-24 shrink-0 justify-center rounded px-2 py-0.5 text-xs ring-1 ${eventBadgeClass(e.type)}`}
+            >
+              {e.type}
+            </span>
+            <span className="w-12 shrink-0 text-right text-zinc-500">#{e.seq}</span>
+            <span className="flex-1 truncate text-zinc-300">{summary(e)}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
