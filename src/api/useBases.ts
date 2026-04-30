@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteBase, fetchBases, type BasesFilters } from "./bases";
+import { postCommand } from "./commands";
 import { useStream } from "./StreamContext";
 import type { BaseFoundEvent } from "./types";
 
@@ -75,6 +76,14 @@ export function useBases(filters: BasesFilters = {}): UseBasesState {
     setBases((prev) => prev.filter((b) => b.idempotency_key !== idempotencyKey));
     try {
       await deleteBase(idempotencyKey);
+      // Tell the bot to drop the base from its in-memory + bases.log
+      // state too. Fire-and-forget — if the bot is offline the command
+      // queue will execute it when it reconnects (CommandPoller polls
+      // every 2 s). We don't care about the result; the dashboard is
+      // already authoritative.
+      void postCommand("basefinder.delete-base", {
+        base_key: idempotencyKey,
+      }).catch(() => {});
     } catch (e) {
       // On failure, surface error and reload the list to resync.
       setError(String(e));

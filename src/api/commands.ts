@@ -6,7 +6,8 @@ export type CommandType =
   | "basefinder.disable"
   | "basefinder.pause"
   | "basefinder.resume"
-  | "basefinder.skip";
+  | "basefinder.skip"
+  | "basefinder.delete-base";
 
 export type CommandRecord = {
   id: number;

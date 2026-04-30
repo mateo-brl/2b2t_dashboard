@@ -326,12 +326,16 @@ export function ReviewModal({ filterDim }: { filterDim: Dimension }) {
         <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--bg-deep)] px-6 py-3">
           <div className="flex items-baseline gap-3">
             <h2 className="text-base font-semibold text-[var(--text-100)]">
-              Review queue
+              {currentBase && !pendingBases.find((b) => b.idempotency_key === currentBase.idempotency_key)
+                ? "Review"
+                : "Review queue"}
             </h2>
             <span className="text-sm text-[var(--text-50)]">
               {pendingBases.length === 0
-                ? "all clear"
-                : `${queueIndex + 1} of ${pendingBases.length} pending`}
+                ? "no pending"
+                : currentBase && !pendingBases.find((b) => b.idempotency_key === currentBase.idempotency_key)
+                  ? `${pendingBases.length} pending elsewhere`
+                  : `${queueIndex + 1} of ${pendingBases.length} pending`}
             </span>
             {bot.latest && (
               <span className="text-xs capitalize text-[var(--text-50)]">
@@ -348,7 +352,7 @@ export function ReviewModal({ filterDim }: { filterDim: Dimension }) {
           </button>
         </header>
 
-        {pendingBases.length === 0 ? (
+        {!currentBase ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-12 text-center">
             <span className="text-3xl">🟢</span>
             <p className="text-base font-medium text-[var(--text-100)]">
@@ -359,7 +363,7 @@ export function ReviewModal({ filterDim }: { filterDim: Dimension }) {
               the bot finds them.
             </p>
           </div>
-        ) : currentBase ? (
+        ) : (
           <div className="flex flex-1 overflow-hidden">
             {/* Left : metadata + actions */}
             <div className="flex w-[360px] shrink-0 flex-col border-r border-[var(--line)] bg-[var(--bg-deep)]/30 p-5">
@@ -492,7 +496,7 @@ export function ReviewModal({ filterDim }: { filterDim: Dimension }) {
               <ScreenshotCarousel baseKey={currentBase.idempotency_key} />
             </div>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
