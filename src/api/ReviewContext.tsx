@@ -13,6 +13,10 @@ type ReviewContextValue = {
   closeModal: () => void;
   selectedBaseKey: string | null;
   setSelectedBaseKey: (key: string | null) => void;
+  // Full bases list panel
+  listOpen: boolean;
+  openList: () => void;
+  closeList: () => void;
 };
 
 const ReviewContext = createContext<ReviewContextValue | null>(null);
@@ -21,12 +25,15 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
   const { map, loading, refresh, markLocally } = useReviewMap();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedBaseKey, setSelectedBaseKey] = useState<string | null>(null);
+  const [listOpen, setListOpen] = useState(false);
 
   const openModal = (baseKey?: string) => {
     if (baseKey) setSelectedBaseKey(baseKey);
     setModalOpen(true);
   };
   const closeModal = () => setModalOpen(false);
+  const openList = () => setListOpen(true);
+  const closeList = () => setListOpen(false);
 
   return (
     <ReviewContext.Provider
@@ -40,6 +47,9 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
         closeModal,
         selectedBaseKey,
         setSelectedBaseKey,
+        listOpen,
+        openList,
+        closeList,
       }}
     >
       {children}

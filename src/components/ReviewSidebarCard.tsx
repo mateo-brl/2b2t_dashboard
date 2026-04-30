@@ -3,7 +3,7 @@ import { fetchReviewCounts } from "../api/reviews";
 import { useReview } from "../api/ReviewContext";
 
 export function ReviewSidebarCard() {
-  const { openModal } = useReview();
+  const { openModal, openList } = useReview();
   const { data } = useQuery({
     queryKey: ["review-counts"],
     queryFn: fetchReviewCounts,
@@ -60,12 +60,20 @@ export function ReviewSidebarCard() {
           </div>
         )}
 
-        <button
-          onClick={() => openModal()}
-          className="w-full rounded-md border border-[var(--cyan)]/40 bg-[var(--cyan)]/10 px-3 py-2 text-sm text-[var(--cyan)] transition-colors hover:bg-[var(--cyan)]/15"
-        >
-          Open review queue
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => openModal()}
+            className="rounded-md border border-[var(--cyan)]/40 bg-[var(--cyan)]/10 px-3 py-2 text-sm text-[var(--cyan)] transition-colors hover:bg-[var(--cyan)]/15"
+          >
+            Review queue
+          </button>
+          <button
+            onClick={() => openList()}
+            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-70)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--text-100)]"
+          >
+            All bases
+          </button>
+        </div>
       </div>
     </section>
   );

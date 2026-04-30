@@ -5,6 +5,7 @@ import { AppHeader } from "./components/AppHeader";
 import { BasesMap } from "./components/BasesMap";
 import { StatsSidebar } from "./components/StatsSidebar";
 import { ReviewModalHost } from "./components/ReviewModalHost";
+import { BasesListPanel } from "./components/BasesListPanel";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 500, refetchOnWindowFocus: false } },
@@ -27,6 +28,7 @@ export default function App() {
               <StatsSidebar />
             </main>
             <ReviewModalHost />
+            <BasesListPanel />
           </div>
         </ReviewProvider>
       </StreamProvider>
