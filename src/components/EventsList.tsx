@@ -66,15 +66,11 @@ export function EventsList({ compact = false }: { compact?: boolean } = {}) {
   }, []);
 
   if (history === null && !historyError) {
-    return (
-      <p className="font-mono text-[11px] text-[var(--text-40)]">loading…</p>
-    );
+    return <p className="text-xs text-[var(--text-50)]">Loading…</p>;
   }
   if (historyError && stream.events.length === 0) {
     return (
-      <p className="font-mono text-[11px] text-[var(--rose)]">
-        error: {historyError}
-      </p>
+      <p className="text-xs text-[var(--rose)]">Error: {historyError}</p>
     );
   }
 
@@ -90,9 +86,9 @@ export function EventsList({ compact = false }: { compact?: boolean } = {}) {
 
   if (merged.length === 0) {
     return (
-      <p className="font-mono text-[11px] leading-relaxed text-[var(--text-40)]">
-        no events yet. start the bot with{" "}
-        <code className="rounded-sm border border-[var(--line)] bg-[var(--surface-2)] px-1 py-0.5 text-[var(--text-60)]">
+      <p className="text-xs leading-relaxed text-[var(--text-50)]">
+        No events yet. Start the bot with{" "}
+        <code className="rounded-sm bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[11px] text-[var(--text-70)]">
           -Dbasefinder.backend.url=…
         </code>
       </p>
@@ -107,23 +103,27 @@ export function EventsList({ compact = false }: { compact?: boolean } = {}) {
         {ordered.map((e) => (
           <li
             key={e.idempotency_key}
-            className="flex items-baseline gap-2 px-1 py-1 font-mono text-[11px] leading-snug"
+            className="flex items-baseline gap-2 px-1 py-1 text-[12px] leading-snug"
           >
             <span
               aria-hidden
               className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${eventDot(e.type)}`}
             />
-            <span className="w-[58px] shrink-0 tabular text-[var(--text-25)]">
+            <span className="w-[60px] shrink-0 font-mono tabular text-[var(--text-50)]">
               {formatTime(e.ts_utc_ms)}
             </span>
             <span
-              className={`w-[68px] shrink-0 truncate uppercase tracking-[0.12em] ${eventAccent(
-                e.type,
-              )}`}
+              className={`w-[68px] shrink-0 truncate ${eventAccent(e.type)}`}
             >
-              {e.type.split("_")[0]}
+              {e.type === "base_found"
+                ? "Base"
+                : e.type === "bot_tick"
+                  ? "Tick"
+                  : e.type === "chunks_scanned_batch"
+                    ? "Scan"
+                    : e.type}
             </span>
-            <span className="flex-1 truncate text-[var(--text-60)]">
+            <span className="flex-1 truncate text-[var(--text-70)]">
               {summary(e)}
             </span>
           </li>

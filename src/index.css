@@ -1,23 +1,22 @@
 @import "tailwindcss";
 
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap");
 
 :root {
   font-family: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
   color-scheme: dark;
 
-  --bg: #07090d;
-  --bg-deep: #050608;
-  --surface-1: #0d1016;
-  --surface-2: #141822;
-  --surface-3: #1c2230;
-  --line: rgba(255, 255, 255, 0.05);
-  --line-strong: rgba(255, 255, 255, 0.09);
-  --grid: rgba(255, 255, 255, 0.025);
-  --text-100: #f3f5f9;
-  --text-60: #9ba5b3;
-  --text-40: #5b6472;
-  --text-25: #3a4150;
+  --bg: #0c0d10;
+  --bg-deep: #0a0b0e;
+  --surface-1: #131418;
+  --surface-2: #1a1c22;
+  --surface-3: #22252d;
+  --line: rgba(255, 255, 255, 0.06);
+  --line-strong: rgba(255, 255, 255, 0.10);
+  --text-100: #ecedf0;
+  --text-70: #b3b6bd;
+  --text-50: #80848d;
+  --text-30: #4d5158;
   --emerald: #10b981;
   --cyan: #22d3ee;
   --amber: #fbbf24;
@@ -26,26 +25,15 @@
 
 body {
   margin: 0;
-  font-feature-settings: "ss01", "ss02", "cv11";
   background-color: var(--bg);
   color: var(--text-100);
   min-height: 100vh;
   overflow: hidden;
-  background-image:
-    /* fine survey grid */
-    linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
-    /* coarse 100px grid */
-    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    /* atmospheric vignette */
-    radial-gradient(circle at 50% 0%, rgba(34, 211, 238, 0.045), transparent 55%),
-    radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.03), transparent 60%);
-  background-size: 24px 24px, 24px 24px, 96px 96px, 96px 96px, 100% 100%, 100% 100%;
+  font-feature-settings: "ss01", "cv11";
 }
 
 ::selection {
-  background: rgba(34, 211, 238, 0.35);
+  background: rgba(34, 211, 238, 0.25);
   color: #fff;
 }
 
@@ -72,116 +60,49 @@ body {
 /* ----- typography helpers ----- */
 .font-mono {
   font-family: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  font-feature-settings: "ss01", "ss02", "calt", "zero";
-}
-.font-display {
-  font-family: "Geist Mono", ui-monospace, monospace;
-  font-feature-settings: "ss01", "calt";
-  letter-spacing: -0.01em;
 }
 .tabular {
   font-variant-numeric: tabular-nums slashed-zero;
 }
 
-/* ----- atmospheric primitives ----- */
-@keyframes ping-soft {
-  0% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  80%,
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
-.live-pulse::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.4;
-  animation: ping-soft 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-
-@keyframes scan {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100%);
-  }
-}
-.scan-line {
-  position: relative;
-  overflow: hidden;
-}
-.scan-line::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(34, 211, 238, 0.07) 50%,
-    transparent 100%
-  );
-  height: 60%;
-  animation: scan 4s linear infinite;
-  pointer-events: none;
-}
-
-/* ----- leaflet popup polish ----- */
+/* ----- leaflet popup polish (light, doesn't fight the icons) ----- */
 .leaflet-popup-content-wrapper {
-  background: var(--surface-2) !important;
-  color: var(--text-100) !important;
-  border: 1px solid var(--line-strong) !important;
-  border-radius: 6px !important;
-  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.6) !important;
+  background: var(--surface-2);
+  color: var(--text-100);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  box-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.6);
 }
 .leaflet-popup-tip {
-  background: var(--surface-2) !important;
-  border: 1px solid var(--line-strong) !important;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
 }
 .leaflet-container {
-  background: var(--bg-deep) !important;
-  font-family: "Geist", ui-sans-serif, system-ui, sans-serif !important;
+  background: var(--bg-deep);
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
 }
 .leaflet-control-zoom a {
-  background: var(--surface-1) !important;
-  color: var(--text-60) !important;
-  border-color: var(--line-strong) !important;
-  font-weight: 400 !important;
+  background: var(--surface-1);
+  color: var(--text-70);
+  border-color: var(--line-strong);
 }
 .leaflet-control-zoom a:hover {
-  background: var(--surface-2) !important;
-  color: var(--text-100) !important;
+  background: var(--surface-2);
+  color: var(--text-100);
 }
 .leaflet-tooltip {
-  background: var(--surface-2) !important;
-  color: var(--text-100) !important;
-  border: 1px solid var(--line-strong) !important;
-  border-radius: 4px !important;
-  font-family: "Geist Mono", ui-monospace, monospace !important;
-  font-size: 11px !important;
-  padding: 3px 6px !important;
-  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.6) !important;
+  background: var(--surface-2);
+  color: var(--text-100);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 3px 6px;
 }
 
-/* ----- geoman polish ----- */
-.leaflet-pm-toolbar .button-container .control-icon {
-  background: var(--surface-1) !important;
-  color: var(--text-60) !important;
-  border: 1px solid var(--line-strong) !important;
-  border-radius: 4px !important;
-}
-.leaflet-pm-toolbar .button-container .control-icon:hover {
-  background: var(--surface-2) !important;
-  color: var(--text-100) !important;
-}
-.leaflet-pm-toolbar .button-container.active .control-icon {
-  background: rgba(16, 185, 129, 0.12) !important;
-  color: var(--emerald) !important;
-  border-color: rgba(16, 185, 129, 0.4) !important;
+/* Geoman tools : we DON'T override .control-icon — those rules killed
+   the SVG icons. Style the toolbar shell only.
+*/
+.leaflet-pm-toolbar .leaflet-pm-icon-active,
+.leaflet-pm-toolbar .button-container.active a {
+  border-color: rgba(16, 185, 129, 0.5) !important;
 }

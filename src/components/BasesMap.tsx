@@ -7,6 +7,7 @@ import { useBases } from "../api/useBases";
 import { useStream } from "../api/StreamContext";
 import { useCoverage } from "../api/useCoverage";
 import { useZones } from "../api/useZones";
+import { useReview } from "../api/ReviewContext";
 import type { BotTickEvent } from "../api/types";
 import {
   DIMENSIONS,
@@ -41,6 +42,7 @@ function colorFor(type: string): string {
 function buildBasePopup(
   b: Record<string, unknown>,
   onDelete: (key: string) => Promise<void>,
+  onReview: () => void,
 ): HTMLElement {
   const cx = Number(b.chunk_x);
   const cz = Number(b.chunk_z);
@@ -52,33 +54,55 @@ function buildBasePopup(
 
   const root = document.createElement("div");
   root.style.cssText =
-    "font:12px ui-monospace,monospace;color:#e6e8ef;background:#1a1d24;padding:8px 10px;border-radius:6px;border:1px solid #2e303a;min-width:220px";
+    "font:12px Geist,ui-sans-serif,system-ui,sans-serif;color:#ecedf0;background:#131418;padding:10px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);min-width:240px";
 
   root.innerHTML = `
-    <div style="color:${color};font-weight:600">${baseType}</div>
-    <div>chunk(${cx}, ${cz}) · ${String(b.dimension ?? "?")}</div>
-    <div>world(${wx}, ${b.world_y ?? "?"}, ${wz})</div>
-    <div>score ${score.toFixed(1)} · seq #${String(b.seq ?? "?")}</div>
+    <div style="color:${color};font-weight:600;font-size:13px;text-transform:capitalize">
+      ${baseType.toLowerCase().replace(/_/g, " ")}
+    </div>
+    <div style="font-family:'Geist Mono',ui-monospace,monospace;color:#9ba5b3;font-size:11px;margin-top:4px">
+      chunk(${cx}, ${cz}) · ${String(b.dimension ?? "?")}
+    </div>
+    <div style="font-family:'Geist Mono',ui-monospace,monospace;color:#9ba5b3;font-size:11px">
+      world(${wx}, ${b.world_y ?? "?"}, ${wz})
+    </div>
+    <div style="font-family:'Geist Mono',ui-monospace,monospace;color:#80848d;font-size:11px;margin-top:2px">
+      score ${score.toFixed(1)} · seq #${String(b.seq ?? "?")}
+    </div>
   `;
 
-  const btn = document.createElement("button");
-  btn.textContent = "Supprimer";
-  btn.style.cssText =
-    "margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid #7f1d1d;background:#450a0a;color:#fca5a5;cursor:pointer;font:11px ui-monospace,monospace;width:100%";
-  btn.onmouseenter = () => (btn.style.background = "#7f1d1d");
-  btn.onmouseleave = () => (btn.style.background = "#450a0a");
-  btn.onclick = async () => {
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:6px;margin-top:10px";
+
+  const reviewBtn = document.createElement("button");
+  reviewBtn.textContent = "Review";
+  reviewBtn.style.cssText =
+    "flex:1;padding:5px 8px;border-radius:4px;border:1px solid rgba(34,211,238,0.4);background:rgba(34,211,238,0.1);color:#22d3ee;cursor:pointer;font:11px Geist,system-ui,sans-serif";
+  reviewBtn.onmouseenter = () => (reviewBtn.style.background = "rgba(34,211,238,0.2)");
+  reviewBtn.onmouseleave = () => (reviewBtn.style.background = "rgba(34,211,238,0.1)");
+  reviewBtn.onclick = () => onReview();
+  row.appendChild(reviewBtn);
+
+  const delBtn = document.createElement("button");
+  delBtn.textContent = "Delete";
+  delBtn.style.cssText =
+    "flex:1;padding:5px 8px;border-radius:4px;border:1px solid rgba(244,63,94,0.4);background:rgba(244,63,94,0.1);color:#f43f5e;cursor:pointer;font:11px Geist,system-ui,sans-serif";
+  delBtn.onmouseenter = () => (delBtn.style.background = "rgba(244,63,94,0.2)");
+  delBtn.onmouseleave = () => (delBtn.style.background = "rgba(244,63,94,0.1)");
+  delBtn.onclick = async () => {
     const key = String(b.idempotency_key ?? "");
     if (!key) return;
-    btn.disabled = true;
-    btn.textContent = "Suppression…";
+    delBtn.disabled = true;
+    delBtn.textContent = "Deleting…";
     try {
       await onDelete(key);
     } catch {
-      btn.textContent = "Erreur";
+      delBtn.textContent = "Error";
     }
   };
-  root.appendChild(btn);
+  row.appendChild(delBtn);
+
+  root.appendChild(row);
   return root;
 }
 
@@ -92,7 +116,10 @@ function FiltersBar({
   setShowCoverage,
   showZones,
   setShowZones,
+  hideFalse,
+  setHideFalse,
   onCenterOnBot,
+  onOpenReview,
   hasBotPosition,
 }: {
   filters: Filters;
@@ -102,66 +129,88 @@ function FiltersBar({
   setShowCoverage: (v: boolean) => void;
   showZones: boolean;
   setShowZones: (v: boolean) => void;
+  hideFalse: boolean;
+  setHideFalse: (v: boolean) => void;
   onCenterOnBot: () => void;
+  onOpenReview: () => void;
   hasBotPosition: boolean;
 }) {
   const dims: Dimension[] = ["overworld", "nether", "end"];
   return (
-    <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] uppercase tracking-[0.16em]">
-      <div className="inline-flex overflow-hidden rounded-sm border border-[var(--line-strong)] bg-[var(--surface-1)]">
+    <div className="flex flex-wrap items-center gap-3 text-sm">
+      <div className="inline-flex overflow-hidden rounded-md border border-[var(--line-strong)] bg-[var(--surface-1)]">
         {dims.map((d) => (
           <button
             key={d}
             onClick={() => setFilters({ ...filters, dim: d })}
             className={
-              "px-3 py-1.5 transition-colors " +
+              "px-3 py-1.5 text-[13px] capitalize transition-colors " +
               (filters.dim === d
                 ? "bg-[var(--surface-3)] text-[var(--text-100)]"
-                : "text-[var(--text-40)] hover:bg-[var(--surface-2)] hover:text-[var(--text-60)]")
+                : "text-[var(--text-50)] hover:bg-[var(--surface-2)] hover:text-[var(--text-70)]")
             }
           >
-            {DIMENSIONS[d].label.toLowerCase()}
+            {DIMENSIONS[d].label}
           </button>
         ))}
       </div>
-      <span className="text-[var(--text-40)]">min score</span>
-      <input
-        type="number"
-        value={filters.minScore}
-        min={0}
-        onChange={(e) =>
-          setFilters({ ...filters, minScore: Number(e.target.value) || 0 })
-        }
-        className="w-20 rounded-sm border border-[var(--line-strong)] bg-[var(--surface-1)] px-2 py-1 font-mono tabular text-[var(--text-100)] outline-none focus:border-[var(--cyan)]/50"
-      />
-      <label className="flex cursor-pointer items-center gap-1.5 text-[var(--text-40)] hover:text-[var(--text-60)]">
+      <label className="flex items-center gap-2 text-[var(--text-50)]">
+        Min score
+        <input
+          type="number"
+          value={filters.minScore}
+          min={0}
+          onChange={(e) =>
+            setFilters({ ...filters, minScore: Number(e.target.value) || 0 })
+          }
+          className="w-20 rounded-md border border-[var(--line-strong)] bg-[var(--surface-1)] px-2 py-1 font-mono tabular text-[var(--text-100)] outline-none focus:border-[var(--cyan)]/50"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center gap-1.5 text-[var(--text-50)] hover:text-[var(--text-70)]">
         <input
           type="checkbox"
           checked={showCoverage}
           onChange={(e) => setShowCoverage(e.target.checked)}
           className="accent-emerald-500"
         />
-        coverage
+        Coverage
       </label>
-      <label className="flex cursor-pointer items-center gap-1.5 text-[var(--text-40)] hover:text-[var(--text-60)]">
+      <label className="flex cursor-pointer items-center gap-1.5 text-[var(--text-50)] hover:text-[var(--text-70)]">
         <input
           type="checkbox"
           checked={showZones}
           onChange={(e) => setShowZones(e.target.checked)}
           className="accent-cyan-400"
         />
-        zones
+        Zones
+      </label>
+      <label className="flex cursor-pointer items-center gap-1.5 text-[var(--text-50)] hover:text-[var(--text-70)]">
+        <input
+          type="checkbox"
+          checked={hideFalse}
+          onChange={(e) => setHideFalse(e.target.checked)}
+          className="accent-zinc-500"
+        />
+        Hide false
       </label>
       <button
         onClick={onCenterOnBot}
         disabled={!hasBotPosition}
-        className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--cyan)]/40 bg-[var(--cyan)]/8 px-2.5 py-1 text-[var(--cyan)] transition-colors hover:bg-[var(--cyan)]/15 disabled:cursor-not-allowed disabled:border-[var(--line-strong)] disabled:bg-transparent disabled:text-[var(--text-25)]"
+        className="rounded-md border border-[var(--cyan)]/40 bg-[var(--cyan)]/10 px-3 py-1 text-[13px] text-[var(--cyan)] transition-colors hover:bg-[var(--cyan)]/15 disabled:cursor-not-allowed disabled:border-[var(--line-strong)] disabled:bg-transparent disabled:text-[var(--text-30)]"
       >
-        ⊕ center on bot
+        Center on bot
       </button>
-      <span className="ml-auto tabular text-[var(--text-40)]">
-        <span className="text-[var(--text-100)]">{count}</span>
-        <span className="text-[var(--text-25)]"> bases</span>
+      <button
+        onClick={onOpenReview}
+        className="rounded-md border border-[var(--amber)]/40 bg-[var(--amber)]/10 px-3 py-1 text-[13px] text-[var(--amber)] transition-colors hover:bg-[var(--amber)]/15"
+      >
+        Review
+      </button>
+      <span className="ml-auto font-mono tabular text-[var(--text-50)]">
+        <span className="text-[var(--text-100)]">{count}</span>{" "}
+        <span className="text-[var(--text-50)]">
+          base{count === 1 ? "" : "s"}
+        </span>
       </span>
     </div>
   );
@@ -270,6 +319,7 @@ export function BasesMap() {
   });
   const [showCoverage, setShowCoverage] = useState(true);
   const [showZones, setShowZones] = useState(true);
+  const [hideFalse, setHideFalse] = useState(true);
   const [botPos, setBotPos] = useState<{ x: number; z: number } | null>(null);
 
   const apiFilters = useMemo(
@@ -284,6 +334,7 @@ export function BasesMap() {
   const stream = useStream();
   const { coverage } = useCoverage(mapInstance, filters.dim, showCoverage);
   const { zones, add, patch, remove } = useZones(filters.dim);
+  const { map: reviewMap, openModal: openReview } = useReview();
 
   // Re-fit when filters change so the new selection lands in view.
   useEffect(() => {
@@ -398,6 +449,8 @@ export function BasesMap() {
     layer.clearLayers();
     const latlngs: L.LatLngExpression[] = [];
     for (const b of bases) {
+      const status = reviewMap.get(b.idempotency_key);
+      if (hideFalse && status === "FALSE_POSITIVE") continue;
       const cx = Number(b.chunk_x);
       const cz = Number(b.chunk_z);
       if (!Number.isFinite(cx) || !Number.isFinite(cz)) continue;
@@ -406,14 +459,42 @@ export function BasesMap() {
       const score = Number(b.score) || 0;
       const radius = 5 + Math.min(9, score / 12);
       const ll = worldToLatLng(wx, wz);
+
+      // Color encodes the review status :
+      //   REAL → emerald, INTERESTING → cyan,
+      //   FALSE_POSITIVE → muted gray, PENDING → base type colour.
+      let fillColor: string;
+      let opacity = 0.9;
+      let outline = "#ffffff";
+      let outlineWeight = 1;
+      switch (status) {
+        case "REAL":
+          fillColor = "#10b981";
+          outline = "#10b981";
+          outlineWeight = 2;
+          break;
+        case "INTERESTING":
+          fillColor = "#22d3ee";
+          outline = "#22d3ee";
+          outlineWeight = 2;
+          break;
+        case "FALSE_POSITIVE":
+          fillColor = "#3a4150";
+          outline = "#3a4150";
+          opacity = 0.45;
+          break;
+        default:
+          fillColor = colorFor(String(b.base_type));
+      }
+
       const marker = L.circleMarker(ll, {
         radius,
-        color: "#ffffff",
-        weight: 1,
-        fillColor: colorFor(String(b.base_type)),
-        fillOpacity: 0.9,
+        color: outline,
+        weight: outlineWeight,
+        fillColor,
+        fillOpacity: opacity,
       });
-      marker.bindPopup(() => buildBasePopup(b, removeBase));
+      marker.bindPopup(() => buildBasePopup(b, removeBase, () => openReview(b.idempotency_key)));
       marker.addTo(layer);
       latlngs.push(ll);
     }
@@ -424,7 +505,7 @@ export function BasesMap() {
       map.fitBounds(fit, { padding: [60, 60], maxZoom: 2 });
       hasFittedRef.current = true;
     }
-  }, [bases]);
+  }, [bases, reviewMap, hideFalse, removeBase, openReview]);
 
   // Sync coverage layer
   useEffect(() => {
@@ -600,43 +681,39 @@ export function BasesMap() {
           setShowCoverage={setShowCoverage}
           showZones={showZones}
           setShowZones={setShowZones}
+          hideFalse={hideFalse}
+          setHideFalse={setHideFalse}
           onCenterOnBot={centerOnBot}
+          onOpenReview={() => openReview()}
           hasBotPosition={botPos !== null}
         />
       </div>
       <div className="relative flex-1 overflow-hidden">
         <div ref={containerRef} className="absolute inset-0" />
 
-        {/* corner crosshairs */}
-        <span aria-hidden className="pointer-events-none absolute left-2 top-2 z-[400] h-3 w-3 border-l border-t border-[var(--line-strong)]" />
-        <span aria-hidden className="pointer-events-none absolute right-2 top-2 z-[400] h-3 w-3 border-r border-t border-[var(--line-strong)]" />
-        <span aria-hidden className="pointer-events-none absolute left-2 bottom-2 z-[400] h-3 w-3 border-l border-b border-[var(--line-strong)]" />
-        <span aria-hidden className="pointer-events-none absolute right-2 bottom-2 z-[400] h-3 w-3 border-r border-b border-[var(--line-strong)]" />
-
-        {/* legend strip — bottom */}
-        <div className="pointer-events-none absolute bottom-3 left-1/2 z-[400] -translate-x-1/2 rounded-sm border border-[var(--line-strong)] bg-[var(--bg-deep)]/85 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-40)] backdrop-blur">
+        {/* legend — bottom centered */}
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-[400] -translate-x-1/2 rounded-md border border-[var(--line-strong)] bg-[var(--bg-deep)]/85 px-3 py-1.5 text-xs text-[var(--text-50)] backdrop-blur">
           <span className="mr-3">
-            <span className="mr-1 text-[var(--cyan)]">●</span> bot
+            <span className="mr-1 text-[var(--cyan)]">●</span> Bot
           </span>
           <span className="mr-3">
-            <span className="mr-1 text-[#f97316]">●</span> spawn
+            <span className="mr-1 text-[#f97316]">●</span> Spawn
           </span>
           <span className="mr-3">
-            <span className="mr-1 text-[var(--emerald)]">▒</span> coverage
+            <span className="mr-1 text-[var(--emerald)]">▒</span> Coverage
           </span>
           <span>
-            <span className="mr-1">┄</span> highways
+            <span className="mr-1">┄</span> Highways
           </span>
         </div>
 
         {isLoading && (
-          <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-sm border border-[var(--line-strong)] bg-[var(--surface-1)]/90 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-60)] backdrop-blur">
-            <span className="relative mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--cyan)] live-pulse" />
-            loading bases…
+          <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border border-[var(--line-strong)] bg-[var(--surface-1)]/90 px-2.5 py-1 text-xs text-[var(--text-70)] backdrop-blur">
+            Loading bases…
           </div>
         )}
         {error && (
-          <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-sm border border-[var(--rose)]/40 bg-[var(--rose)]/15 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--rose)] backdrop-blur">
+          <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border border-[var(--rose)]/40 bg-[var(--rose)]/15 px-2.5 py-1 text-xs text-[var(--rose)] backdrop-blur">
             {error}
           </div>
         )}

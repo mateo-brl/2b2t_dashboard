@@ -3,35 +3,22 @@ import { useBotState } from "../api/useBotState";
 import { listZones } from "../api/zones";
 import { BotControlPanel } from "./BotControlPanel";
 import { EventsList } from "./EventsList";
+import { ReviewSidebarCard } from "./ReviewSidebarCard";
 
 function Section({
-  label,
+  title,
   meta,
   children,
 }: {
-  label: string;
+  title: string;
   meta?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-hidden rounded-md border border-[var(--line-strong)] bg-[var(--surface-1)]">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute left-0 top-0 h-2 w-2 border-l border-t border-[var(--line-strong)]"
-      />
-      <span
-        aria-hidden
-        className="pointer-events-none absolute right-0 top-0 h-2 w-2 border-r border-t border-[var(--line-strong)]"
-      />
+    <section className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-1)]">
       <header className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5">
-        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-40)]">
-          {label}
-        </span>
-        {meta && (
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-25)]">
-            {meta}
-          </span>
-        )}
+        <span className="text-sm font-medium text-[var(--text-100)]">{title}</span>
+        {meta && <span className="text-xs text-[var(--text-50)]">{meta}</span>}
       </header>
       <div className="px-4 py-3">{children}</div>
     </section>
@@ -39,14 +26,14 @@ function Section({
 }
 
 function tpsTone(tps: number | undefined): { color: string; label: string } {
-  if (tps === undefined) return { color: "text-[var(--text-40)]", label: "—" };
+  if (tps === undefined) return { color: "text-[var(--text-50)]", label: "—" };
   if (tps >= 18) return { color: "text-[var(--emerald)]", label: tps.toFixed(1) };
   if (tps >= 12) return { color: "text-[var(--amber)]", label: tps.toFixed(1) };
   return { color: "text-[var(--rose)]", label: tps.toFixed(1) };
 }
 
 function hpTone(hp: number | undefined): string {
-  if (hp === undefined) return "bg-[var(--text-40)]";
+  if (hp === undefined) return "bg-[var(--text-30)]";
   if (hp >= 16) return "bg-[var(--emerald)]";
   if (hp >= 8) return "bg-[var(--amber)]";
   return "bg-[var(--rose)]";
@@ -59,14 +46,12 @@ function PositionBlock() {
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-40)]">
-          coords
-        </span>
-        <span className="rounded-sm border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[var(--text-60)]">
+        <span className="text-xs text-[var(--text-50)]">Coords</span>
+        <span className="rounded-sm bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] capitalize text-[var(--text-70)]">
           {dim}
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-2 font-mono">
+      <div className="grid grid-cols-3 gap-2">
         {(["x", "y", "z"] as const).map((axis, i) => {
           const value = t
             ? axis === "x"
@@ -76,15 +61,16 @@ function PositionBlock() {
                 : t.pos_z
             : null;
           return (
-            <div key={axis} className="rounded-sm bg-[var(--surface-2)]/60 p-2">
-              <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-40)]">
+            <div
+              key={axis}
+              className="rounded-sm bg-[var(--surface-2)] p-2"
+            >
+              <div className="text-[10px] uppercase tracking-wide text-[var(--text-50)]">
                 {axis}
               </div>
               <div
-                className={`mt-1 truncate font-display text-base font-medium tabular ${
-                  i === 1
-                    ? "text-[var(--cyan)]"
-                    : "text-[var(--text-100)]"
+                className={`mt-1 truncate font-mono tabular text-[15px] font-medium ${
+                  i === 1 ? "text-[var(--cyan)]" : "text-[var(--text-100)]"
                 }`}
               >
                 {value === null
@@ -108,14 +94,11 @@ function VitalsGrid() {
 
   return (
     <div className="grid grid-cols-2 gap-2">
-      {/* HP */}
-      <div className="rounded-sm bg-[var(--surface-2)]/60 p-2.5">
+      <div className="rounded-sm bg-[var(--surface-2)] p-2.5">
         <div className="flex items-baseline justify-between">
-          <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-40)]">
-            hp
-          </span>
-          <span className="font-mono text-[10px] tabular text-[var(--text-60)]">
-            {hp ?? "—"}/20
+          <span className="text-[11px] text-[var(--text-50)]">HP</span>
+          <span className="font-mono tabular text-[11px] text-[var(--text-70)]">
+            {hp ?? "—"} / 20
           </span>
         </div>
         <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
@@ -126,17 +109,10 @@ function VitalsGrid() {
         </div>
       </div>
 
-      {/* TPS */}
-      <div className="rounded-sm bg-[var(--surface-2)]/60 p-2.5">
+      <div className="rounded-sm bg-[var(--surface-2)] p-2.5">
         <div className="flex items-baseline justify-between">
-          <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-40)]">
-            tps
-          </span>
-          <span
-            className={`font-mono text-[10px] uppercase tracking-[0.16em] ${
-              tps.color
-            }`}
-          >
+          <span className="text-[11px] text-[var(--text-50)]">TPS</span>
+          <span className={`text-[11px] ${tps.color}`}>
             {(t?.tps ?? 0) >= 18
               ? "stable"
               : (t?.tps ?? 0) >= 12
@@ -146,27 +122,21 @@ function VitalsGrid() {
                   : "—"}
           </span>
         </div>
-        <div className={`mt-1 font-display text-xl font-medium tabular ${tps.color}`}>
+        <div className={`mt-1 font-mono tabular text-[18px] font-medium ${tps.color}`}>
           {tps.label}
         </div>
       </div>
 
-      {/* Scanned */}
-      <div className="rounded-sm bg-[var(--surface-2)]/60 p-2.5">
-        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-40)]">
-          chunks scanned
-        </div>
-        <div className="mt-1 font-display text-xl font-medium tabular text-[var(--text-100)]">
+      <div className="rounded-sm bg-[var(--surface-2)] p-2.5">
+        <div className="text-[11px] text-[var(--text-50)]">Chunks scanned</div>
+        <div className="mt-1 font-mono tabular text-[18px] font-medium text-[var(--text-100)]">
           {t ? t.scanned_chunks.toLocaleString().replace(/,/g, " ") : "—"}
         </div>
       </div>
 
-      {/* Bases */}
-      <div className="rounded-sm bg-[var(--surface-2)]/60 p-2.5">
-        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-40)]">
-          bases found
-        </div>
-        <div className="mt-1 font-display text-xl font-medium tabular text-[var(--amber)]">
+      <div className="rounded-sm bg-[var(--surface-2)] p-2.5">
+        <div className="text-[11px] text-[var(--text-50)]">Bases found</div>
+        <div className="mt-1 font-mono tabular text-[18px] font-medium text-[var(--amber)]">
           {t ? t.bases_found.toLocaleString().replace(/,/g, " ") : "—"}
         </div>
       </div>
@@ -176,24 +146,20 @@ function VitalsGrid() {
 
 function FlightStateRow() {
   const bot = useBotState();
-  const state = bot.latest?.flight_state ?? "OFFLINE";
+  const state = bot.latest?.flight_state ?? "Offline";
   const flying = bot.latest?.flying ?? false;
   return (
-    <div className="flex items-center justify-between rounded-sm border border-[var(--line)] bg-[var(--surface-2)]/40 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-40)]">
-          phase
-        </span>
-        <span className="font-mono text-[12px] uppercase tracking-[0.16em] text-[var(--text-100)]">
-          {state}
+    <div className="flex items-center justify-between rounded-sm bg-[var(--surface-2)] px-3 py-2">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[11px] text-[var(--text-50)]">Phase</span>
+        <span className="font-mono text-[12px] text-[var(--text-100)]">
+          {state.replace(/_/g, " ").toLowerCase()}
         </span>
       </div>
       <span
-        className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
-          flying ? "text-[var(--cyan)]" : "text-[var(--text-25)]"
-        }`}
+        className={`text-[11px] ${flying ? "text-[var(--cyan)]" : "text-[var(--text-50)]"}`}
       >
-        {flying ? "✈ flying" : "· grounded"}
+        {flying ? "flying" : "grounded"}
       </span>
     </div>
   );
@@ -209,14 +175,10 @@ function WaypointsRow() {
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-40)]">
-          waypoints
-        </span>
-        <span className="font-mono text-[11px] tabular text-[var(--text-60)]">
-          <span className="text-[var(--text-100)]">
-            {total > 0 ? idx + 1 : 0}
-          </span>
-          <span className="text-[var(--text-40)]"> / {total}</span>
+        <span className="text-[11px] text-[var(--text-50)]">Waypoints</span>
+        <span className="font-mono tabular text-[12px]">
+          <span className="text-[var(--text-100)]">{total > 0 ? idx + 1 : 0}</span>
+          <span className="text-[var(--text-50)]"> / {total}</span>
         </span>
       </div>
       <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
@@ -241,27 +203,21 @@ function ZonesRow() {
   const active = data?.filter((z) => z.active).length ?? 0;
 
   return (
-    <div className="flex items-center justify-between rounded-sm border border-[var(--line)] bg-[var(--surface-2)]/40 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-40)]">
-          search zones
-        </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-25)]">
-          {dim}
-        </span>
+    <div className="flex items-center justify-between rounded-sm bg-[var(--surface-2)] px-3 py-2">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[11px] text-[var(--text-50)]">Search zones</span>
+        <span className="text-[11px] capitalize text-[var(--text-50)]">{dim}</span>
       </div>
-      <span className="font-mono text-[11px] tabular">
+      <span className="font-mono tabular text-[12px]">
         <span
           className={
-            active > 0
-              ? "text-[var(--emerald)]"
-              : "text-[var(--text-40)]"
+            active > 0 ? "text-[var(--emerald)]" : "text-[var(--text-50)]"
           }
         >
           {active} active
         </span>
-        <span className="text-[var(--text-25)]"> · </span>
-        <span className="text-[var(--text-40)]">{total} total</span>
+        <span className="text-[var(--text-30)]"> · </span>
+        <span className="text-[var(--text-50)]">{total} total</span>
       </span>
     </div>
   );
@@ -269,38 +225,38 @@ function ZonesRow() {
 
 export function StatsSidebar() {
   return (
-    <aside className="flex h-full w-[400px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-deep)]/40">
-      <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-2.5">
-        <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--text-40)]">
-          telemetry · live
+    <aside className="flex h-full w-[380px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--bg-deep)]">
+      <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3">
+        <span className="text-sm font-medium text-[var(--text-100)]">
+          Telemetry
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-25)]">
-          1 hz
-        </span>
+        <span className="text-xs text-[var(--text-50)]">Live · 1 Hz</span>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         <BotControlPanel />
 
-        <Section label="player position" meta="snapshot">
+        <ReviewSidebarCard />
+
+        <Section title="Position">
           <PositionBlock />
         </Section>
 
-        <Section label="vitals">
+        <Section title="Vitals">
           <div className="space-y-3">
             <VitalsGrid />
             <FlightStateRow />
           </div>
         </Section>
 
-        <Section label="navigation">
+        <Section title="Navigation">
           <div className="space-y-3">
             <WaypointsRow />
             <ZonesRow />
           </div>
         </Section>
 
-        <Section label="event log" meta="last 50">
+        <Section title="Events" meta="Last 50">
           <EventsList compact />
         </Section>
       </div>

@@ -11,28 +11,29 @@ function ConnectionPill() {
 
   if (isLoading) {
     return (
-      <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-40)]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--text-40)]" />
-        connecting
+      <span className="inline-flex items-center gap-2 text-sm text-[var(--text-50)]">
+        <span className="h-2 w-2 rounded-full bg-[var(--text-50)]" />
+        Connecting…
       </span>
     );
   }
   if (isError || !data) {
     return (
-      <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--rose)]">
-        <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-[var(--rose)] live-pulse" />
-        backend offline
+      <span className="inline-flex items-center gap-2 text-sm text-[var(--rose)]">
+        <span className="h-2 w-2 rounded-full bg-[var(--rose)]" />
+        Backend offline
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--emerald)]">
-      <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-[var(--emerald)] live-pulse" />
-      backend
-      <span className="text-[var(--text-40)]">v{data.version}</span>
-      <span className="text-[var(--text-40)]">·</span>
-      <span className="tabular text-[var(--text-60)]">
-        {data.eventsStored.toLocaleString()} stored
+    <span className="inline-flex items-center gap-2 text-sm">
+      <span className="h-2 w-2 rounded-full bg-[var(--emerald)]" />
+      <span className="text-[var(--text-100)]">Backend</span>
+      <span className="font-mono text-xs text-[var(--text-50)]">
+        v{data.version}
+      </span>
+      <span className="font-mono tabular text-xs text-[var(--text-50)]">
+        · {data.eventsStored.toLocaleString()} stored
       </span>
     </span>
   );
@@ -40,25 +41,36 @@ function ConnectionPill() {
 
 function StreamPill() {
   const bot = useBotState();
-  const cls =
+  const color =
     bot.power === "ACTIVE"
-      ? "text-[var(--cyan)]"
+      ? "var(--emerald)"
       : bot.power === "OFFLINE"
-        ? "text-[var(--rose)]"
+        ? "var(--rose)"
         : bot.power === "PAUSED"
-          ? "text-[var(--amber)]"
-          : "text-[var(--text-40)]";
+          ? "var(--amber)"
+          : "var(--text-50)";
+
+  const label =
+    bot.power === "ACTIVE"
+      ? "Active"
+      : bot.power === "PAUSED"
+        ? "Paused"
+        : bot.power === "OFFLINE"
+          ? "Offline"
+          : "Idle";
 
   return (
-    <span
-      className={`inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] ${cls}`}
-    >
-      <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-current live-pulse" />
-      bot
-      <span className="text-[var(--text-40)]">{bot.power}</span>
-      <span className="text-[var(--text-40)]">·</span>
-      <span className="tabular text-[var(--text-60)]">
-        {formatAge(bot.ageSeconds)}
+    <span className="inline-flex items-center gap-2 text-sm">
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ background: color }}
+      />
+      <span className="text-[var(--text-100)]">Bot</span>
+      <span className="text-[var(--text-50)]" style={{ color }}>
+        {label}
+      </span>
+      <span className="font-mono tabular text-xs text-[var(--text-50)]">
+        · {bot.latest ? formatAge(bot.ageSeconds) : "no data"}
       </span>
     </span>
   );
@@ -66,37 +78,13 @@ function StreamPill() {
 
 export function AppHeader() {
   return (
-    <header className="relative flex h-14 shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--bg-deep)]/60 px-5 backdrop-blur">
-      {/* corner crosshair lines */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute left-0 top-0 h-3 w-3 border-l border-t border-[var(--line-strong)]"
-      />
-      <span
-        aria-hidden
-        className="pointer-events-none absolute right-0 top-0 h-3 w-3 border-r border-t border-[var(--line-strong)]"
-      />
-
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2.5">
-          <span
-            aria-hidden
-            className="grid h-7 w-7 place-items-center rounded-sm border border-[var(--line-strong)] bg-[var(--surface-1)] font-mono text-[11px] text-[var(--emerald)]"
-          >
-            ◈
-          </span>
-          <div className="flex flex-col leading-none">
-            <span className="font-mono text-sm font-medium tracking-[0.22em] text-[var(--text-100)]">
-              BASEFINDER
-            </span>
-            <span className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--text-40)]">
-              survey · 2b2t.org
-            </span>
-          </div>
-        </div>
-        <span className="h-6 w-px bg-[var(--line)]" />
-        <span className="hidden font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-40)] md:inline">
-          recon command
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--bg-deep)] px-5">
+      <div className="flex items-baseline gap-3">
+        <h1 className="text-[15px] font-semibold tracking-tight text-[var(--text-100)]">
+          BaseFinder
+        </h1>
+        <span className="text-xs text-[var(--text-50)]">
+          Live telemetry · 2b2t
         </span>
       </div>
 
