@@ -6,70 +6,78 @@ import type { BaseEvent } from "../api/types";
 const CAP = 50;
 
 function formatTime(tsMs: number): string {
-  return new Date(tsMs).toLocaleTimeString();
+  const d = new Date(tsMs);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
 }
 
-function eventBadgeClass(type: string): string {
+function eventAccent(type: string): string {
   switch (type) {
     case "base_found":
-      return "bg-amber-500/20 text-amber-300 ring-amber-500/40";
+      return "text-[var(--amber)]";
     case "bot_tick":
-      return "bg-sky-500/15 text-sky-300 ring-sky-500/30";
+      return "text-[var(--cyan)]";
+    case "chunks_scanned_batch":
+      return "text-[var(--emerald)]";
     default:
-      return "bg-zinc-700/40 text-zinc-300 ring-zinc-600/40";
+      return "text-[var(--text-40)]";
+  }
+}
+
+function eventDot(type: string): string {
+  switch (type) {
+    case "base_found":
+      return "bg-[var(--amber)]";
+    case "bot_tick":
+      return "bg-[var(--cyan)]";
+    case "chunks_scanned_batch":
+      return "bg-[var(--emerald)]";
+    default:
+      return "bg-[var(--text-40)]";
   }
 }
 
 function summary(event: BaseEvent): string {
   if (event.type === "base_found") {
-    return `${String(event.base_type)} @ chunk(${event.chunk_x},${event.chunk_z}) score ${Number(event.score).toFixed(1)}`;
+    return `${String(event.base_type)} · score ${Number(event.score).toFixed(1)} · chunk(${event.chunk_x},${event.chunk_z})`;
   }
   if (event.type === "bot_tick") {
     const flying = event.flying ? "✈" : "·";
-    return `${flying} y=${event.pos_y}  hp=${event.hp}  tps=${Number(event.tps).toFixed(1)}  chunks=${event.scanned_chunks}  bases=${event.bases_found}  ${event.flight_state}`;
+    return `${flying} ${event.flight_state} · y=${event.pos_y} hp=${event.hp} chunks=${(event.scanned_chunks as number).toLocaleString()}`;
   }
-  return JSON.stringify(event);
+  if (event.type === "chunks_scanned_batch") {
+    const arr = (event.chunks as number[]) ?? [];
+    return `+${arr.length} chunks · ${event.dimension}`;
+  }
+  return JSON.stringify(event).slice(0, 80);
 }
 
-function StreamPill({ status, count }: { status: string; count: number }) {
-  const cls =
-    status === "open"
-      ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40"
-      : status === "connecting"
-        ? "bg-zinc-700/40 text-zinc-300 ring-zinc-600/40"
-        : "bg-red-500/15 text-red-300 ring-red-500/40";
-  const label =
-    status === "open" ? "live" : status === "connecting" ? "connecting" : "stream lost";
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs ring-1 ${cls}`}
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {label} · {count}
-    </span>
-  );
-}
-
-export function EventsList() {
+export function EventsList({ compact = false }: { compact?: boolean } = {}) {
   const [history, setHistory] = useState<BaseEvent[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const stream = useStream();
 
-  // Initial fetch: populate the list with the last 50 events from the DB so
-  // the user does not stare at an empty box waiting for the next live event.
   useEffect(() => {
     fetchRecentEvents(CAP)
       .then((res) => setHistory(res.events))
       .catch((e) => setHistoryError(String(e)));
   }, []);
 
-  if (history === null && !historyError) return <p className="text-zinc-500">Loading…</p>;
+  if (history === null && !historyError) {
+    return (
+      <p className="font-mono text-[11px] text-[var(--text-40)]">loading…</p>
+    );
+  }
   if (historyError && stream.events.length === 0) {
-    return <p className="text-red-400">Error: {historyError}</p>;
+    return (
+      <p className="font-mono text-[11px] text-[var(--rose)]">
+        error: {historyError}
+      </p>
+    );
   }
 
-  // Merge history (REST snapshot) + live events (SSE), dedup by idempotency_key,
-  // keep newest last (insertion order), then cap.
   const seen = new Set<string>();
   const merged: BaseEvent[] = [];
   for (const e of [...(history ?? []), ...stream.events]) {
@@ -82,41 +90,71 @@ export function EventsList() {
 
   if (merged.length === 0) {
     return (
-      <div className="space-y-2">
-        <StreamPill status={stream.status} count={0} />
-        <p className="text-zinc-500">
-          No events yet. Start the bot with{" "}
-          <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-300">
-            -Dbasefinder.backend.url=http://127.0.0.1:8080
-          </code>
-          .
-        </p>
-      </div>
+      <p className="font-mono text-[11px] leading-relaxed text-[var(--text-40)]">
+        no events yet. start the bot with{" "}
+        <code className="rounded-sm border border-[var(--line)] bg-[var(--surface-2)] px-1 py-0.5 text-[var(--text-60)]">
+          -Dbasefinder.backend.url=…
+        </code>
+      </p>
     );
   }
 
-  // Newest first
   const ordered = [...merged].reverse();
+
+  if (compact) {
+    return (
+      <ol className="-mx-1 max-h-72 space-y-px overflow-y-auto pr-1">
+        {ordered.map((e) => (
+          <li
+            key={e.idempotency_key}
+            className="flex items-baseline gap-2 px-1 py-1 font-mono text-[11px] leading-snug"
+          >
+            <span
+              aria-hidden
+              className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${eventDot(e.type)}`}
+            />
+            <span className="w-[58px] shrink-0 tabular text-[var(--text-25)]">
+              {formatTime(e.ts_utc_ms)}
+            </span>
+            <span
+              className={`w-[68px] shrink-0 truncate uppercase tracking-[0.12em] ${eventAccent(
+                e.type,
+              )}`}
+            >
+              {e.type.split("_")[0]}
+            </span>
+            <span className="flex-1 truncate text-[var(--text-60)]">
+              {summary(e)}
+            </span>
+          </li>
+        ))}
+      </ol>
+    );
+  }
 
   return (
     <div className="space-y-2">
-      <StreamPill status={stream.status} count={merged.length} />
-      <ol className="divide-y divide-zinc-800 rounded-lg border border-zinc-800 bg-zinc-950/40">
+      <ol className="divide-y divide-[var(--line)] rounded-md border border-[var(--line-strong)] bg-[var(--surface-1)]">
         {ordered.map((e) => (
           <li
             key={e.idempotency_key}
             className="flex items-baseline gap-3 px-4 py-2 font-mono text-sm"
           >
-            <span className="w-20 shrink-0 text-zinc-500">
+            <span className="w-20 shrink-0 tabular text-[var(--text-40)]">
               {formatTime(e.ts_utc_ms)}
             </span>
             <span
-              className={`inline-flex w-24 shrink-0 justify-center rounded px-2 py-0.5 text-xs ring-1 ${eventBadgeClass(e.type)}`}
+              className={`inline-flex w-32 shrink-0 items-center gap-1.5 rounded-sm px-2 py-0.5 text-xs ring-1 ring-[var(--line-strong)] ${eventAccent(e.type)}`}
             >
+              <span className={`h-1.5 w-1.5 rounded-full ${eventDot(e.type)}`} />
               {e.type}
             </span>
-            <span className="w-12 shrink-0 text-right text-zinc-500">#{e.seq}</span>
-            <span className="flex-1 truncate text-zinc-300">{summary(e)}</span>
+            <span className="w-12 shrink-0 text-right tabular text-[var(--text-40)]">
+              #{e.seq}
+            </span>
+            <span className="flex-1 truncate text-[var(--text-60)]">
+              {summary(e)}
+            </span>
           </li>
         ))}
       </ol>

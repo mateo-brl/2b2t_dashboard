@@ -107,24 +107,24 @@ function FiltersBar({
 }) {
   const dims: Dimension[] = ["overworld", "nether", "end"];
   return (
-    <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400">
-      <div className="inline-flex overflow-hidden rounded border border-zinc-700">
+    <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] uppercase tracking-[0.16em]">
+      <div className="inline-flex overflow-hidden rounded-sm border border-[var(--line-strong)] bg-[var(--surface-1)]">
         {dims.map((d) => (
           <button
             key={d}
             onClick={() => setFilters({ ...filters, dim: d })}
             className={
-              "px-3 py-1 text-xs transition-colors " +
+              "px-3 py-1.5 transition-colors " +
               (filters.dim === d
-                ? "bg-zinc-700 text-zinc-100"
-                : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800")
+                ? "bg-[var(--surface-3)] text-[var(--text-100)]"
+                : "text-[var(--text-40)] hover:bg-[var(--surface-2)] hover:text-[var(--text-60)]")
             }
           >
-            {DIMENSIONS[d].label}
+            {DIMENSIONS[d].label.toLowerCase()}
           </button>
         ))}
       </div>
-      <span className="text-zinc-500">Min score</span>
+      <span className="text-[var(--text-40)]">min score</span>
       <input
         type="number"
         value={filters.minScore}
@@ -132,34 +132,37 @@ function FiltersBar({
         onChange={(e) =>
           setFilters({ ...filters, minScore: Number(e.target.value) || 0 })
         }
-        className="w-20 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-200"
+        className="w-20 rounded-sm border border-[var(--line-strong)] bg-[var(--surface-1)] px-2 py-1 font-mono tabular text-[var(--text-100)] outline-none focus:border-[var(--cyan)]/50"
       />
-      <label className="flex items-center gap-1 text-xs">
+      <label className="flex cursor-pointer items-center gap-1.5 text-[var(--text-40)] hover:text-[var(--text-60)]">
         <input
           type="checkbox"
           checked={showCoverage}
           onChange={(e) => setShowCoverage(e.target.checked)}
           className="accent-emerald-500"
         />
-        Coverage
+        coverage
       </label>
-      <label className="flex items-center gap-1 text-xs">
+      <label className="flex cursor-pointer items-center gap-1.5 text-[var(--text-40)] hover:text-[var(--text-60)]">
         <input
           type="checkbox"
           checked={showZones}
           onChange={(e) => setShowZones(e.target.checked)}
-          className="accent-blue-500"
+          className="accent-cyan-400"
         />
-        Zones
+        zones
       </label>
       <button
         onClick={onCenterOnBot}
         disabled={!hasBotPosition}
-        className="rounded border border-cyan-700 bg-cyan-900/40 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-900/70 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-600"
+        className="inline-flex items-center gap-1.5 rounded-sm border border-[var(--cyan)]/40 bg-[var(--cyan)]/8 px-2.5 py-1 text-[var(--cyan)] transition-colors hover:bg-[var(--cyan)]/15 disabled:cursor-not-allowed disabled:border-[var(--line-strong)] disabled:bg-transparent disabled:text-[var(--text-25)]"
       >
-        Centrer sur le bot
+        ⊕ center on bot
       </button>
-      <span className="ml-auto text-zinc-500">{count} bases shown</span>
+      <span className="ml-auto tabular text-[var(--text-40)]">
+        <span className="text-[var(--text-100)]">{count}</span>
+        <span className="text-[var(--text-25)]"> bases</span>
+      </span>
     </div>
   );
 }
@@ -587,36 +590,57 @@ export function BasesMap() {
   };
 
   return (
-    <div className="space-y-2">
-      <FiltersBar
-        filters={filters}
-        setFilters={setFilters}
-        count={bases.length}
-        showCoverage={showCoverage}
-        setShowCoverage={setShowCoverage}
-        showZones={showZones}
-        setShowZones={setShowZones}
-        onCenterOnBot={centerOnBot}
-        hasBotPosition={botPos !== null}
-      />
-      <div className="relative h-[640px] overflow-hidden rounded-lg border border-zinc-800">
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] bg-[var(--bg-deep)]/40 px-5 py-2.5">
+        <FiltersBar
+          filters={filters}
+          setFilters={setFilters}
+          count={bases.length}
+          showCoverage={showCoverage}
+          setShowCoverage={setShowCoverage}
+          showZones={showZones}
+          setShowZones={setShowZones}
+          onCenterOnBot={centerOnBot}
+          hasBotPosition={botPos !== null}
+        />
+      </div>
+      <div className="relative flex-1 overflow-hidden">
         <div ref={containerRef} className="absolute inset-0" />
+
+        {/* corner crosshairs */}
+        <span aria-hidden className="pointer-events-none absolute left-2 top-2 z-[400] h-3 w-3 border-l border-t border-[var(--line-strong)]" />
+        <span aria-hidden className="pointer-events-none absolute right-2 top-2 z-[400] h-3 w-3 border-r border-t border-[var(--line-strong)]" />
+        <span aria-hidden className="pointer-events-none absolute left-2 bottom-2 z-[400] h-3 w-3 border-l border-b border-[var(--line-strong)]" />
+        <span aria-hidden className="pointer-events-none absolute right-2 bottom-2 z-[400] h-3 w-3 border-r border-b border-[var(--line-strong)]" />
+
+        {/* legend strip — bottom */}
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-[400] -translate-x-1/2 rounded-sm border border-[var(--line-strong)] bg-[var(--bg-deep)]/85 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-40)] backdrop-blur">
+          <span className="mr-3">
+            <span className="mr-1 text-[var(--cyan)]">●</span> bot
+          </span>
+          <span className="mr-3">
+            <span className="mr-1 text-[#f97316]">●</span> spawn
+          </span>
+          <span className="mr-3">
+            <span className="mr-1 text-[var(--emerald)]">▒</span> coverage
+          </span>
+          <span>
+            <span className="mr-1">┄</span> highways
+          </span>
+        </div>
+
         {isLoading && (
-          <div className="pointer-events-none absolute left-3 top-3 z-[400] rounded bg-zinc-900/80 px-2 py-1 text-xs text-zinc-300 ring-1 ring-zinc-700">
+          <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-sm border border-[var(--line-strong)] bg-[var(--surface-1)]/90 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-60)] backdrop-blur">
+            <span className="relative mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--cyan)] live-pulse" />
             loading bases…
           </div>
         )}
         {error && (
-          <div className="pointer-events-none absolute left-3 top-3 z-[400] rounded bg-red-900/80 px-2 py-1 text-xs text-red-200 ring-1 ring-red-500/40">
+          <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-sm border border-[var(--rose)]/40 bg-[var(--rose)]/15 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--rose)] backdrop-blur">
             {error}
           </div>
         )}
       </div>
-      <p className="text-xs text-zinc-600">
-        Coords MC natives · Spawn = ●, bot = cyan · highways = pointillés ·
-        coverage = vert (chunks scannés) · outils dessin (haut-gauche) →
-        zones envoyées au bot.
-      </p>
     </div>
   );
 }

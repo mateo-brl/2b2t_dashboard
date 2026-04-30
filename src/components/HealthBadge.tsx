@@ -1,3 +1,7 @@
+// Re-exported for backward compatibility. The real connection indicator
+// now lives in AppHeader's ConnectionPill — this badge is no longer used
+// in the new layout but is kept here so any external consumer keeps
+// resolving the import.
 import { useQuery } from "@tanstack/react-query";
 import { fetchHealth } from "../api/client";
 
@@ -10,31 +14,24 @@ export function HealthBadge() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-zinc-400">
-        <span className="h-2 w-2 rounded-full bg-zinc-600" />
-        connecting…
-      </div>
+      <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-40)]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--text-40)]" />
+        connecting
+      </span>
     );
   }
-
   if (isError || !data) {
     return (
-      <div className="flex items-center gap-2 text-sm text-red-400">
-        <span className="h-2 w-2 rounded-full bg-red-500" />
-        backend unreachable
-      </div>
+      <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--rose)]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--rose)]" />
+        backend offline
+      </span>
     );
   }
-
   return (
-    <div className="flex items-center gap-2 text-sm text-zinc-300">
-      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-      <span className="font-medium">backend</span>
-      <span className="text-zinc-500">v{data.version}</span>
-      <span className="ml-2 text-zinc-500">
-        {data.eventsStored.toLocaleString()} stored ·{" "}
-        {data.eventsReceived.toLocaleString()} received this session
-      </span>
-    </div>
+    <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--emerald)]">
+      <span className="h-1.5 w-1.5 rounded-full bg-[var(--emerald)]" />
+      backend v{data.version}
+    </span>
   );
 }
