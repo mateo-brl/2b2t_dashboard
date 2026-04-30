@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useBases } from "../api/useBases";
+import { useCombinedBases } from "../api/useCombinedBases";
 import { useBotState } from "../api/useBotState";
 import { postReview, type ReviewStatus } from "../api/reviews";
 import { fetchScreenshotsForBase, type Screenshot } from "../api/screenshots";
@@ -181,8 +181,10 @@ export function ReviewModal({ filterDim }: { filterDim: Dimension }) {
   const { modalOpen, closeModal, map, markLocally, selectedBaseKey, setSelectedBaseKey } = useReview();
   const bot = useBotState();
 
-  // Use the same data source as the map: base_found events (initial fetch + SSE)
-  const { bases } = useBases({ dim: filterDim, limit: 1000 });
+  // Combined source: live base_found events + ghost bases reconstructed
+  // from base_reviews so previously-reviewed bases (whose event row may
+  // have been deleted) are still navigable.
+  const { bases } = useCombinedBases({ dim: filterDim, limit: 1000 });
   const [pendingAction, setPendingAction] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -196,15 +198,18 @@ export function ReviewModal({ filterDim }: { filterDim: Dimension }) {
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0));
   }, [bases, map]);
 
-  // Track current base by key (so it survives the queue resorting after a review)
+  // Track current base. If the user opened the modal on a specific key
+  // (e.g. from the popup or the All-bases panel), we honour that key
+  // even if the base is already reviewed (we want to let them browse
+  // their notes / screenshots). Otherwise we surface the head of the
+  // pending queue.
   const currentBase: BaseFoundEvent | null = useMemo(() => {
-    if (selectedBaseKey == null) return pendingBases[0] ?? null;
-    return (
-      pendingBases.find((b) => b.idempotency_key === selectedBaseKey) ??
-      pendingBases[0] ??
-      null
-    );
-  }, [pendingBases, selectedBaseKey]);
+    if (selectedBaseKey != null) {
+      const explicit = bases.find((b) => b.idempotency_key === selectedBaseKey);
+      if (explicit) return explicit;
+    }
+    return pendingBases[0] ?? null;
+  }, [bases, pendingBases, selectedBaseKey]);
 
   // Keep the selectedBaseKey aligned with whatever the queue is currently surfacing.
   useEffect(() => {
@@ -360,8 +365,38 @@ export function ReviewModal({ filterDim }: { filterDim: Dimension }) {
             <div className="flex w-[360px] shrink-0 flex-col border-r border-[var(--line)] bg-[var(--bg-deep)]/30 p-5">
               <div className="space-y-4">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-[var(--text-50)]">
-                    Type
+                  <div className="flex items-baseline justify-between">
+                    <div className="text-xs uppercase tracking-wide text-[var(--text-50)]">
+                      Type
+                    </div>
+                    {(() => {
+                      const status = map.get(currentBase.idempotency_key);
+                      if (!status || status === "PENDING") return null;
+                      const color =
+                        status === "REAL"
+                          ? "var(--emerald)"
+                          : status === "INTERESTING"
+                            ? "var(--cyan)"
+                            : "var(--text-50)";
+                      const label =
+                        status === "REAL"
+                          ? "Real"
+                          : status === "INTERESTING"
+                            ? "Interesting"
+                            : "False";
+                      return (
+                        <span
+                          className="rounded-sm border px-2 py-0.5 text-[10px]"
+                          style={{
+                            color,
+                            borderColor: `${color}66`,
+                            background: `${color}1a`,
+                          }}
+                        >
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <div
                     className="mt-1 text-2xl font-semibold capitalize"
@@ -369,6 +404,12 @@ export function ReviewModal({ filterDim }: { filterDim: Dimension }) {
                   >
                     {String(currentBase.base_type).toLowerCase().replace(/_/g, " ")}
                   </div>
+                  {currentBase.ts_utc_ms === 0 && (
+                    <div className="mt-1 text-[11px] italic text-[var(--text-50)]">
+                      Reviewed orphan — base event no longer in DB.
+                      Notes / screenshots preserved.
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

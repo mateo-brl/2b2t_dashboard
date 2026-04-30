@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useBases } from "../api/useBases";
+import { useCombinedBases } from "../api/useCombinedBases";
 import { useReview } from "../api/ReviewContext";
 import { fetchReview, postReview, type Review, type ReviewStatus } from "../api/reviews";
 import type { BaseFoundEvent } from "../api/types";
@@ -165,7 +165,7 @@ function StatusPill({ status }: { status: ReviewStatus | "PENDING" }) {
 export function BasesListPanel() {
   const { listOpen, closeList, map: reviewMap, openModal } = useReview();
   const [dim, setDim] = useState<Dimension>("overworld");
-  const { bases, remove: removeBase } = useBases({ dim, limit: 1000 });
+  const { bases, remove: removeBase } = useCombinedBases({ dim, limit: 1000 });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -432,6 +432,14 @@ export function BasesListPanel() {
                           <span className="capitalize text-[var(--text-100)]">
                             {String(b.base_type).toLowerCase().replace(/_/g, " ")}
                           </span>
+                          {b.ts_utc_ms === 0 && (
+                            <span
+                              className="rounded-sm border border-[var(--text-30)]/50 bg-[var(--surface-2)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--text-50)]"
+                              title="Reviewed but the base event was deleted from the DB"
+                            >
+                              orphan
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono tabular text-[var(--amber)]">
