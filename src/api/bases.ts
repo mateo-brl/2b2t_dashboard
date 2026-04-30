@@ -23,3 +23,17 @@ export async function fetchBases(filters: BasesFilters = {}): Promise<BasesRespo
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
+
+export async function deleteBase(idempotencyKey: string): Promise<void> {
+  // Path may contain colons / slashes from the bot's key format
+  // ("dim:chunkX:chunkZ:type"). encodeURIComponent keeps Ktor's wildcard
+  // route happy.
+  const encoded = idempotencyKey
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
+  const res = await fetch(`${BASE_URL}/v1/bases/${encoded}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`${res.status} ${res.statusText}`);
+  }
+}

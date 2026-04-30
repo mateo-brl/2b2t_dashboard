@@ -1,24 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import maplibregl, { type StyleSpecification } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "@geoman-io/leaflet-geoman-free";
+import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useBases } from "../api/useBases";
-
-/**
- * Minecraft uses a Cartesian coordinate system; MapLibre's globe expects
- * longitudes (-180..180) and latitudes (-85..85). We pick a linear scale
- * that maps the 2b2t world (~±30M blocks) into the visible world rect:
- *   lng = mcX * 180 / SCALE
- *   lat = -mcZ * 85 / SCALE   (Z+ in MC ≈ south = lat-)
- * SCALE picked at 500_000 so the typical exploration zone (±3M blocks)
- * occupies most of the globe — the user can pan/zoom freely from there.
- */
-const SCALE = 500_000;
-
-function mcToLngLat(mcX: number, mcZ: number): [number, number] {
-  const lng = (mcX * 180) / SCALE;
-  const lat = (-mcZ * 85) / SCALE;
-  return [Math.max(-179.9, Math.min(179.9, lng)), Math.max(-84.9, Math.min(84.9, lat))];
-}
+import { useStream } from "../api/StreamContext";
+import { useCoverage } from "../api/useCoverage";
+import { useZones } from "../api/useZones";
+import type { BotTickEvent } from "../api/types";
+import {
+  DIMENSIONS,
+  dimensionBounds,
+  worldToLatLng,
+  latLngToWorld,
+  type Dimension,
+} from "../map/worldCoords";
+import { highwaysLayer } from "../map/highways";
+import type { Zone } from "../api/zones";
 
 const baseColor: Record<string, string> = {
   STASH: "#f59e0b",
@@ -35,42 +33,97 @@ function colorFor(type: string): string {
   return baseColor[type] ?? "#cbd5e1";
 }
 
-const BLANK_DARK_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {},
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#0b0d12" },
-    },
-  ],
-};
+/**
+ * Build the popup DOM for a base. Inline DOM (not innerHTML) so the
+ * "Supprimer" button can carry a real click handler — innerHTML strings
+ * are inert in Leaflet popups.
+ */
+function buildBasePopup(
+  b: Record<string, unknown>,
+  onDelete: (key: string) => Promise<void>,
+): HTMLElement {
+  const cx = Number(b.chunk_x);
+  const cz = Number(b.chunk_z);
+  const wx = Number(b.world_x ?? cx * 16 + 8);
+  const wz = Number(b.world_z ?? cz * 16 + 8);
+  const score = Number(b.score) || 0;
+  const baseType = String(b.base_type ?? "?");
+  const color = colorFor(baseType);
 
-type Filters = { dim: string; minScore: number };
+  const root = document.createElement("div");
+  root.style.cssText =
+    "font:12px ui-monospace,monospace;color:#e6e8ef;background:#1a1d24;padding:8px 10px;border-radius:6px;border:1px solid #2e303a;min-width:220px";
+
+  root.innerHTML = `
+    <div style="color:${color};font-weight:600">${baseType}</div>
+    <div>chunk(${cx}, ${cz}) · ${String(b.dimension ?? "?")}</div>
+    <div>world(${wx}, ${b.world_y ?? "?"}, ${wz})</div>
+    <div>score ${score.toFixed(1)} · seq #${String(b.seq ?? "?")}</div>
+  `;
+
+  const btn = document.createElement("button");
+  btn.textContent = "Supprimer";
+  btn.style.cssText =
+    "margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid #7f1d1d;background:#450a0a;color:#fca5a5;cursor:pointer;font:11px ui-monospace,monospace;width:100%";
+  btn.onmouseenter = () => (btn.style.background = "#7f1d1d");
+  btn.onmouseleave = () => (btn.style.background = "#450a0a");
+  btn.onclick = async () => {
+    const key = String(b.idempotency_key ?? "");
+    if (!key) return;
+    btn.disabled = true;
+    btn.textContent = "Suppression…";
+    try {
+      await onDelete(key);
+    } catch {
+      btn.textContent = "Erreur";
+    }
+  };
+  root.appendChild(btn);
+  return root;
+}
+
+type Filters = { dim: Dimension; minScore: number };
 
 function FiltersBar({
   filters,
   setFilters,
   count,
+  showCoverage,
+  setShowCoverage,
+  showZones,
+  setShowZones,
+  onCenterOnBot,
+  hasBotPosition,
 }: {
   filters: Filters;
   setFilters: (f: Filters) => void;
   count: number;
+  showCoverage: boolean;
+  setShowCoverage: (v: boolean) => void;
+  showZones: boolean;
+  setShowZones: (v: boolean) => void;
+  onCenterOnBot: () => void;
+  hasBotPosition: boolean;
 }) {
+  const dims: Dimension[] = ["overworld", "nether", "end"];
   return (
     <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400">
-      <span className="text-zinc-500">Dimension</span>
-      <select
-        value={filters.dim}
-        onChange={(e) => setFilters({ ...filters, dim: e.target.value })}
-        className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-200"
-      >
-        <option value="">All</option>
-        <option value="overworld">Overworld</option>
-        <option value="nether">Nether</option>
-        <option value="end">End</option>
-      </select>
+      <div className="inline-flex overflow-hidden rounded border border-zinc-700">
+        {dims.map((d) => (
+          <button
+            key={d}
+            onClick={() => setFilters({ ...filters, dim: d })}
+            className={
+              "px-3 py-1 text-xs transition-colors " +
+              (filters.dim === d
+                ? "bg-zinc-700 text-zinc-100"
+                : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800")
+            }
+          >
+            {DIMENSIONS[d].label}
+          </button>
+        ))}
+      </div>
       <span className="text-zinc-500">Min score</span>
       <input
         type="number"
@@ -81,150 +134,266 @@ function FiltersBar({
         }
         className="w-20 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-200"
       />
+      <label className="flex items-center gap-1 text-xs">
+        <input
+          type="checkbox"
+          checked={showCoverage}
+          onChange={(e) => setShowCoverage(e.target.checked)}
+          className="accent-emerald-500"
+        />
+        Coverage
+      </label>
+      <label className="flex items-center gap-1 text-xs">
+        <input
+          type="checkbox"
+          checked={showZones}
+          onChange={(e) => setShowZones(e.target.checked)}
+          className="accent-blue-500"
+        />
+        Zones
+      </label>
+      <button
+        onClick={onCenterOnBot}
+        disabled={!hasBotPosition}
+        className="rounded border border-cyan-700 bg-cyan-900/40 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-900/70 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-600"
+      >
+        Centrer sur le bot
+      </button>
       <span className="ml-auto text-zinc-500">{count} bases shown</span>
     </div>
   );
 }
 
+/**
+ * Build the GeoJSON Feature payload that we ship to the backend when the
+ * user creates / edits a Geoman shape. We persist the canonical Leaflet
+ * Geoman geometry so the bot can re-rehydrate the shape exactly.
+ *
+ * Coords are in CRS.Simple latlng = (-Z, X). The bot does the inverse
+ * transform when consuming.
+ */
+function layerToGeometry(layer: L.Layer, shape: string): {
+  geometry: { type: string; coordinates: unknown };
+  shape: string;
+} {
+  if (layer instanceof L.Circle) {
+    const c = layer.getLatLng();
+    const r = layer.getRadius();
+    return {
+      shape,
+      geometry: {
+        type: "Circle",
+        // Custom geometry: GeoJSON has no Circle; we store
+        // [centerX, centerZ, radiusBlocks] for the bot's convenience.
+        coordinates: {
+          centerX: c.lng,
+          centerZ: -c.lat,
+          radius: r,
+        },
+      },
+    };
+  }
+  if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+    const latlngs = layer.getLatLngs() as L.LatLng[][];
+    // Support holes : the first ring is the outer boundary.
+    const rings = latlngs.map((ring) =>
+      ring.map((ll) => {
+        const w = latLngToWorld(ll);
+        return [w.x, w.z];
+      }),
+    );
+    return {
+      shape,
+      geometry: {
+        type: "Polygon",
+        coordinates: rings,
+      },
+    };
+  }
+  return { shape, geometry: { type: "Unknown", coordinates: null } };
+}
+
+/** Inverse: rebuild a Leaflet layer from a stored zone. */
+function geometryToLayer(zone: Zone, color: string): L.Layer | null {
+  const g = zone.geometry as { type: string; coordinates: unknown };
+  if (g.type === "Circle") {
+    const c = g.coordinates as { centerX: number; centerZ: number; radius: number };
+    return L.circle(worldToLatLng(c.centerX, c.centerZ), {
+      radius: c.radius,
+      color,
+      fillColor: color,
+      fillOpacity: 0.12,
+      weight: 2,
+    });
+  }
+  if (g.type === "Polygon") {
+    const rings = g.coordinates as number[][][];
+    const latlngs = rings.map((ring) => ring.map(([x, z]) => worldToLatLng(x, z)));
+    if (zone.shape === "Rectangle" && latlngs.length === 1 && latlngs[0].length === 5) {
+      const ring = latlngs[0];
+      // points 0 and 2 are opposite corners
+      const p0 = L.latLng(ring[0] as L.LatLngTuple);
+      const p2 = L.latLng(ring[2] as L.LatLngTuple);
+      return L.rectangle(L.latLngBounds(p0, p2), {
+        color,
+        fillColor: color,
+        fillOpacity: 0.12,
+        weight: 2,
+      });
+    }
+    return L.polygon(latlngs, {
+      color,
+      fillColor: color,
+      fillOpacity: 0.12,
+      weight: 2,
+    });
+  }
+  return null;
+}
+
 export function BasesMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const basesLayerRef = useRef<L.LayerGroup | null>(null);
+  const coverageLayerRef = useRef<L.LayerGroup | null>(null);
+  const coverageRendererRef = useRef<L.Renderer | null>(null);
+  const zonesLayerRef = useRef<L.FeatureGroup | null>(null);
+  const playerMarkerRef = useRef<L.CircleMarker | null>(null);
   const hasFittedRef = useRef(false);
-  const [mapReady, setMapReady] = useState(false);
-  const [filters, setFilters] = useState<Filters>({ dim: "overworld", minScore: 0 });
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  const [filters, setFilters] = useState<Filters>({
+    dim: "overworld",
+    minScore: 0,
+  });
+  const [showCoverage, setShowCoverage] = useState(true);
+  const [showZones, setShowZones] = useState(true);
+  const [botPos, setBotPos] = useState<{ x: number; z: number } | null>(null);
 
   const apiFilters = useMemo(
     () => ({
-      dim: filters.dim || undefined,
+      dim: filters.dim,
       minScore: filters.minScore || undefined,
       limit: 1000,
     }),
     [filters],
   );
-  const { bases, isLoading, error } = useBases(apiFilters);
+  const { bases, isLoading, error, remove: removeBase } = useBases(apiFilters);
+  const stream = useStream();
+  const { coverage } = useCoverage(mapInstance, filters.dim, showCoverage);
+  const { zones, add, patch, remove } = useZones(filters.dim);
 
   // Re-fit when filters change so the new selection lands in view.
   useEffect(() => {
     hasFittedRef.current = false;
   }, [filters.dim, filters.minScore]);
 
-  // Init map once
+  // Init map (re-create on dimension change)
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || mapRef.current) return;
+    if (!container) return;
 
-    const map = new maplibregl.Map({
-      container,
-      style: BLANK_DARK_STYLE,
-      center: [0, 0],
-      zoom: 4,
+    const meta = DIMENSIONS[filters.dim];
+    container.style.backgroundColor = meta.background;
+
+    const bounds = L.latLngBounds(
+      dimensionBounds(filters.dim) as L.LatLngBoundsLiteral,
+    );
+    const map = L.map(container, {
+      crs: L.CRS.Simple,
+      minZoom: -16,
+      maxZoom: 14,
+      zoomSnap: 0.25,
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 80,
       attributionControl: false,
-      renderWorldCopies: false,
+      maxBoundsViscosity: 0.8,
+      preferCanvas: true,
     });
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
+    map.fitBounds(bounds);
+    map.setMaxBounds(bounds.pad(0.2));
 
-    map.on("error", (e) => {
-      // Surface map errors so we don't have an invisible-failure mode.
-      // eslint-disable-next-line no-console
-      console.error("[BasesMap] MapLibre error:", e.error ?? e);
+    // Spawn anchor (always at 0,0)
+    L.circleMarker(worldToLatLng(0, 0), {
+      radius: 6,
+      color: "#ffffff",
+      weight: 1.5,
+      fillColor: "#f97316",
+      fillOpacity: 1,
+      interactive: false,
+    })
+      .bindTooltip("spawn (0, 0)", { permanent: false, opacity: 0.9 })
+      .addTo(map);
+
+    highwaysLayer(filters.dim).addTo(map);
+
+    // Coverage layer goes BELOW everything else (fewer false collisions
+    // with hover targets). Dedicated canvas renderer with extra padding so
+    // the cells aren't continuously repainted on small pans.
+    const coverageRenderer = L.canvas({ padding: 0.5 });
+    coverageRendererRef.current = coverageRenderer;
+    const coverageGroup = L.layerGroup([coverageRenderer]).addTo(map);
+    coverageLayerRef.current = coverageGroup;
+
+    const basesGroup = L.layerGroup().addTo(map);
+    basesLayerRef.current = basesGroup;
+
+    const zonesGroup = L.featureGroup().addTo(map);
+    zonesLayerRef.current = zonesGroup;
+
+    // Geoman draw toolbar
+    map.pm.addControls({
+      position: "topleft",
+      drawMarker: false,
+      drawCircleMarker: false,
+      drawPolyline: false,
+      drawText: false,
+      drawRectangle: true,
+      drawPolygon: true,
+      drawCircle: true,
+      editMode: true,
+      dragMode: true,
+      cutPolygon: false,
+      removalMode: true,
+      rotateMode: false,
     });
-
-    // eslint-disable-next-line no-console
-    console.log("[BasesMap] map created, awaiting load…");
-
-    map.on("load", () => {
-      // eslint-disable-next-line no-console
-      console.log("[BasesMap] map load fired, size=", map.getCanvas().width, "x", map.getCanvas().height);
-
-      // GeoJSON source + circle layer: rendered inside the WebGL canvas
-      // so it cannot be hidden by Tailwind / global CSS resets.
-      map.addSource("bases", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
-      map.addLayer({
-        id: "bases-layer",
-        type: "circle",
-        source: "bases",
-        paint: {
-          "circle-radius": [
-            "interpolate", ["linear"], ["coalesce", ["get", "score"], 0],
-            0, 5,
-            100, 14,
-          ],
-          "circle-color": ["coalesce", ["get", "color"], "#cbd5e1"],
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.2,
-          "circle-opacity": 0.95,
-        },
-      });
-
-      // Spawn anchor as a separate static layer so it never disappears.
-      map.addSource("spawn", {
-        type: "geojson",
-        data: {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [0, 0] },
-          properties: {},
-        },
-      });
-      map.addLayer({
-        id: "spawn-layer",
-        type: "circle",
-        source: "spawn",
-        paint: {
-          "circle-radius": 6,
-          "circle-color": "#f97316",
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
-        },
-      });
-
-      // Click on a base point: open a popup with details.
-      map.on("click", "bases-layer", (e) => {
-        const f = e.features?.[0];
-        if (!f) return;
-        const p = f.properties ?? {};
-        const lngLat = (f.geometry as GeoJSON.Point).coordinates as [number, number];
-        new maplibregl.Popup({ offset: 12, closeButton: false })
-          .setLngLat(lngLat)
-          .setHTML(
-            `<div style="font:12px ui-monospace,monospace;color:#e6e8ef;background:#1a1d24;padding:8px 10px;border-radius:6px;border:1px solid #2e303a">
-              <div style="color:${String(p.color ?? "#cbd5e1")};font-weight:600">${String(p.base_type ?? "?")}</div>
-              <div>chunk(${p.chunk_x}, ${p.chunk_z}) · ${String(p.dimension ?? "?")}</div>
-              <div>world(${p.world_x}, ${p.world_y ?? "?"}, ${p.world_z})</div>
-              <div>score ${Number(p.score ?? 0).toFixed(1)} · seq #${p.seq}</div>
-            </div>`,
-          )
-          .addTo(map);
-      });
-      map.on("mouseenter", "bases-layer", () => (map.getCanvas().style.cursor = "pointer"));
-      map.on("mouseleave", "bases-layer", () => (map.getCanvas().style.cursor = ""));
-
-      requestAnimationFrame(() => map.resize());
-      setMapReady(true);
+    map.pm.setPathOptions({
+      color: meta.accent,
+      fillColor: meta.accent,
+      fillOpacity: 0.12,
+      weight: 2,
+    });
+    map.pm.setGlobalOptions({
+      layerGroup: zonesGroup,
+      snappable: false,
     });
 
-    // Watch container resizes so the canvas stays in sync with layout.
-    const ro = new ResizeObserver(() => map.resize());
+    setMapInstance(map);
+    mapRef.current = map;
+
+    const ro = new ResizeObserver(() => map.invalidateSize());
     ro.observe(container);
 
-    mapRef.current = map;
     return () => {
       ro.disconnect();
       map.remove();
       mapRef.current = null;
+      basesLayerRef.current = null;
+      coverageLayerRef.current = null;
+      coverageRendererRef.current = null;
+      zonesLayerRef.current = null;
+      playerMarkerRef.current = null;
+      setMapInstance(null);
     };
-  }, []);
+  }, [filters.dim]);
 
-  // Sync GeoJSON source with bases.
+  // Sync bases layer
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady) return;
-    // eslint-disable-next-line no-console
-    console.log("[BasesMap] sync layer: bases=", bases.length);
+    const layer = basesLayerRef.current;
+    if (!map || !layer) return;
 
-    const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
+    layer.clearLayers();
+    const latlngs: L.LatLngExpression[] = [];
     for (const b of bases) {
       const cx = Number(b.chunk_x);
       const cz = Number(b.chunk_z);
@@ -232,59 +401,221 @@ export function BasesMap() {
       const wx = Number(b.world_x ?? cx * 16 + 8);
       const wz = Number(b.world_z ?? cz * 16 + 8);
       const score = Number(b.score) || 0;
-      features.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: mcToLngLat(wx, wz) },
-        properties: {
-          idempotency_key: b.idempotency_key,
-          seq: b.seq,
-          base_type: b.base_type,
-          dimension: b.dimension,
-          chunk_x: cx,
-          chunk_z: cz,
-          world_x: wx,
-          world_y: b.world_y,
-          world_z: wz,
-          score,
-          color: colorFor(String(b.base_type)),
-        },
+      const radius = 5 + Math.min(9, score / 12);
+      const ll = worldToLatLng(wx, wz);
+      const marker = L.circleMarker(ll, {
+        radius,
+        color: "#ffffff",
+        weight: 1,
+        fillColor: colorFor(String(b.base_type)),
+        fillOpacity: 0.9,
       });
+      marker.bindPopup(() => buildBasePopup(b, removeBase));
+      marker.addTo(layer);
+      latlngs.push(ll);
     }
-    const source = map.getSource("bases") as maplibregl.GeoJSONSource | undefined;
-    source?.setData({ type: "FeatureCollection", features });
 
-    // Auto-fit bounds when we have at least one base and the user has not
-    // panned manually.
     if (bases.length > 0 && !hasFittedRef.current) {
-      const bounds = new maplibregl.LngLatBounds();
-      bounds.extend([0, 0]); // include spawn so the user keeps the anchor
-      for (const f of features) {
-        bounds.extend(f.geometry.coordinates as [number, number]);
-      }
-      map.fitBounds(bounds, { padding: 60, maxZoom: 4, duration: 600 });
+      const fit = L.latLngBounds(latlngs);
+      fit.extend(worldToLatLng(0, 0));
+      map.fitBounds(fit, { padding: [60, 60], maxZoom: 2 });
       hasFittedRef.current = true;
     }
-  }, [bases, mapReady]);
+  }, [bases]);
+
+  // Sync coverage layer
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = coverageLayerRef.current;
+    const renderer = coverageRendererRef.current;
+    if (!map || !layer) return;
+    // Toggle off → just hide. We re-clear lazily when new data arrives so
+    // the user doesn't see a blank flash.
+    if (!showCoverage) {
+      layer.clearLayers();
+      if (renderer) layer.addLayer(renderer);
+      return;
+    }
+    if (!coverage) return;
+    layer.clearLayers();
+    if (renderer) layer.addLayer(renderer);
+    const cellBlocks = coverage.cellSizeBlocks;
+    const maxCount = Math.max(1, coverage.grid * coverage.grid);
+    for (const cell of coverage.cells) {
+      const x0 = cell.cx * cellBlocks;
+      const x1 = x0 + cellBlocks;
+      const z0 = cell.cz * cellBlocks;
+      const z1 = z0 + cellBlocks;
+      const ratio = Math.min(1, cell.count / maxCount);
+      // Discrete opacity buckets so the density palette reads at a glance
+      // and keeps cells visually quiet (max 0.30).
+      const fillOpacity = ratio < 0.05 ? 0.07
+        : ratio < 0.25 ? 0.13
+        : ratio < 0.5 ? 0.20
+        : 0.28;
+      L.rectangle(
+        L.latLngBounds(worldToLatLng(x0, z0), worldToLatLng(x1, z1)),
+        {
+          color: "#10b981",
+          weight: 0,
+          fillColor: "#10b981",
+          fillOpacity,
+          interactive: false,
+          renderer: renderer ?? undefined,
+        },
+      ).addTo(layer);
+    }
+  }, [coverage, showCoverage, filters.dim]);
+
+  // Sync zones from backend → map. We rebuild the layer group from scratch
+  // each time the zones array changes so deletes / edits from another tab
+  // are reflected. Geoman editing live on the same map mutates the layer
+  // in place; the next reload picks up the patched geometry.
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = zonesLayerRef.current;
+    if (!map || !layer) return;
+    layer.clearLayers();
+    if (!showZones) return;
+    const accent = DIMENSIONS[filters.dim].accent;
+    for (const zone of zones) {
+      const built = geometryToLayer(zone, accent);
+      if (!built) continue;
+      // Tag the layer with the backend id so pm:edit/pm:remove can call
+      // the right CRUD endpoint.
+      (built as L.Layer & { __zoneId?: number }).__zoneId = zone.id;
+      built.bindTooltip(
+        `${zone.name}${zone.active ? "" : " (off)"}`,
+        { sticky: true, opacity: 0.85 },
+      );
+      built.addTo(layer);
+    }
+  }, [zones, showZones, filters.dim]);
+
+  // Wire Geoman events → backend CRUD. We bind once per map instance.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const dimAtMount = filters.dim;
+
+    const onCreate = (e: { layer: L.Layer; shape: string }) => {
+      const meta = layerToGeometry(e.layer, e.shape);
+      void add({
+        dim: dimAtMount,
+        shape: meta.shape,
+        geometry: meta.geometry as unknown as Zone["geometry"],
+        active: true,
+      })
+        .then((z) => {
+          (e.layer as L.Layer & { __zoneId?: number }).__zoneId = z.id;
+        })
+        .catch((err) => console.error("[BasesMap] create zone failed:", err));
+    };
+
+    const onEdit = (e: { layer: L.Layer; shape?: string }) => {
+      const layer = e.layer as L.Layer & { __zoneId?: number };
+      if (layer.__zoneId == null) return;
+      const meta = layerToGeometry(e.layer, e.shape ?? "Polygon");
+      void patch(layer.__zoneId, {
+        geometry: meta.geometry as unknown as Zone["geometry"],
+        shape: meta.shape,
+      }).catch((err) => console.error("[BasesMap] edit zone failed:", err));
+    };
+
+    const onRemove = (e: { layer: L.Layer }) => {
+      const layer = e.layer as L.Layer & { __zoneId?: number };
+      if (layer.__zoneId == null) return;
+      void remove(layer.__zoneId).catch((err) =>
+        console.error("[BasesMap] delete zone failed:", err),
+      );
+    };
+
+    map.on("pm:create", onCreate);
+    map.on("pm:edit", onEdit);
+    map.on("pm:remove", onRemove);
+    return () => {
+      map.off("pm:create", onCreate);
+      map.off("pm:edit", onEdit);
+      map.off("pm:remove", onRemove);
+    };
+  }, [mapInstance, add, patch, remove, filters.dim]);
+
+  // Live player position via SSE bot_tick events (filtered by dim).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (stream.events.length === 0) return;
+
+    // Walk the stream from newest to oldest, find the latest bot_tick for
+    // the current dimension. Cheap because cap=200.
+    let latest: BotTickEvent | null = null;
+    for (let i = stream.events.length - 1; i >= 0; i--) {
+      const e = stream.events[i];
+      if (e.type === "bot_tick") {
+        const t = e as BotTickEvent;
+        if (t.dimension === filters.dim) {
+          latest = t;
+          break;
+        }
+      }
+    }
+    if (!latest) return;
+    const ll = worldToLatLng(latest.pos_x, latest.pos_z);
+    setBotPos({ x: latest.pos_x, z: latest.pos_z });
+    if (!playerMarkerRef.current) {
+      playerMarkerRef.current = L.circleMarker(ll, {
+        radius: 7,
+        color: "#ffffff",
+        weight: 2,
+        fillColor: "#22d3ee",
+        fillOpacity: 1,
+      })
+        .bindTooltip("bot", { permanent: false, opacity: 0.9 })
+        .addTo(map);
+    } else {
+      playerMarkerRef.current.setLatLng(ll);
+    }
+  }, [stream.events, filters.dim]);
+
+  const centerOnBot = () => {
+    const map = mapRef.current;
+    if (!map || !botPos) return;
+    map.flyTo(worldToLatLng(botPos.x, botPos.z), Math.max(map.getZoom(), 0), {
+      duration: 0.6,
+    });
+  };
 
   return (
     <div className="space-y-2">
-      <FiltersBar filters={filters} setFilters={setFilters} count={bases.length} />
-      <div className="relative h-[480px] overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/40">
+      <FiltersBar
+        filters={filters}
+        setFilters={setFilters}
+        count={bases.length}
+        showCoverage={showCoverage}
+        setShowCoverage={setShowCoverage}
+        showZones={showZones}
+        setShowZones={setShowZones}
+        onCenterOnBot={centerOnBot}
+        hasBotPosition={botPos !== null}
+      />
+      <div className="relative h-[640px] overflow-hidden rounded-lg border border-zinc-800">
         <div ref={containerRef} className="absolute inset-0" />
         {isLoading && (
-          <div className="pointer-events-none absolute left-3 top-3 rounded bg-zinc-900/80 px-2 py-1 text-xs text-zinc-300 ring-1 ring-zinc-700">
+          <div className="pointer-events-none absolute left-3 top-3 z-[400] rounded bg-zinc-900/80 px-2 py-1 text-xs text-zinc-300 ring-1 ring-zinc-700">
             loading bases…
           </div>
         )}
         {error && (
-          <div className="pointer-events-none absolute left-3 top-3 rounded bg-red-900/80 px-2 py-1 text-xs text-red-200 ring-1 ring-red-500/40">
+          <div className="pointer-events-none absolute left-3 top-3 z-[400] rounded bg-red-900/80 px-2 py-1 text-xs text-red-200 ring-1 ring-red-500/40">
             {error}
           </div>
         )}
       </div>
       <p className="text-xs text-zinc-600">
-        Coords MC ±{(SCALE / 1_000_000).toFixed(1)}M ↔ globe MapLibre. Z inversé (sud =
-        lat−). Cliquez un point pour le détail.
+        Coords MC natives · Spawn = ●, bot = cyan · highways = pointillés ·
+        coverage = vert (chunks scannés) · outils dessin (haut-gauche) →
+        zones envoyées au bot.
       </p>
     </div>
   );

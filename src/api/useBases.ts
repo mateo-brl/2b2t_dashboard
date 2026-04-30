@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { fetchBases, type BasesFilters } from "./bases";
+import { useCallback, useEffect, useState } from "react";
+import { deleteBase, fetchBases, type BasesFilters } from "./bases";
 import { useStream } from "./StreamContext";
 import type { BaseFoundEvent } from "./types";
 
@@ -7,6 +7,7 @@ export type UseBasesState = {
   bases: BaseFoundEvent[];
   isLoading: boolean;
   error: string | null;
+  remove: (idempotencyKey: string) => Promise<void>;
 };
 
 /**
@@ -69,5 +70,19 @@ export function useBases(filters: BasesFilters = {}): UseBasesState {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream.events, filters.dim, filters.minScore]);
 
-  return { bases, isLoading, error };
+  const remove = useCallback(async (idempotencyKey: string) => {
+    // Optimistic: drop from local state immediately, then DELETE on backend.
+    setBases((prev) => prev.filter((b) => b.idempotency_key !== idempotencyKey));
+    try {
+      await deleteBase(idempotencyKey);
+    } catch (e) {
+      // On failure, surface error and reload the list to resync.
+      setError(String(e));
+      const fresh = await fetchBases(filters);
+      setBases(fresh.bases);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.dim, filters.minScore, filters.limit]);
+
+  return { bases, isLoading, error, remove };
 }

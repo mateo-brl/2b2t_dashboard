@@ -13,7 +13,10 @@ export type BaseEvent = {
 
 export type BotTickEvent = BaseEvent & {
   type: "bot_tick";
+  pos_x: number;
   pos_y: number;
+  pos_z: number;
+  dimension: string;
   hp: number;
   tps: number;
   scanned_chunks: number;
@@ -22,6 +25,12 @@ export type BotTickEvent = BaseEvent & {
   flight_state: string;
   wp_index: number;
   wp_total: number;
+};
+
+export type ChunksScannedBatchEvent = BaseEvent & {
+  type: "chunks_scanned_batch";
+  dimension: string;
+  chunks: number[];
 };
 
 export type BaseFoundEvent = BaseEvent & {
